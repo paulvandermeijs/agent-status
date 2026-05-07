@@ -48,11 +48,13 @@ impl StateStore {
     }
 
     pub fn list(&self) -> io::Result<Vec<(String, AttentionEntry)>> {
-        if !self.dir.exists() {
-            return Ok(Vec::new());
-        }
+        let iter = match fs::read_dir(&self.dir) {
+            Ok(it) => it,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(e) => return Err(e),
+        };
         let mut out = Vec::new();
-        for entry in fs::read_dir(&self.dir)? {
+        for entry in iter {
             let entry = entry?;
             if !entry.file_type()?.is_file() {
                 continue;
