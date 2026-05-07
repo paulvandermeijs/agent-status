@@ -34,6 +34,7 @@ impl StateStore {
     }
 
     pub fn write(&self, session_id: &str, entry: &AttentionEntry) -> io::Result<()> {
+        validate_session_id(session_id)?;
         fs::create_dir_all(&self.dir)?;
         let json = serde_json::to_vec(entry)
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
@@ -41,6 +42,7 @@ impl StateStore {
     }
 
     pub fn remove(&self, session_id: &str) -> io::Result<()> {
+        validate_session_id(session_id)?;
         match fs::remove_file(self.dir.join(session_id)) {
             Ok(()) => Ok(()),
             Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
@@ -72,6 +74,21 @@ impl StateStore {
         out.sort_by(|a, b| a.1.ts.cmp(&b.1.ts).then_with(|| a.0.cmp(&b.0)));
         Ok(out)
     }
+}
+
+fn validate_session_id(session_id: &str) -> io::Result<()> {
+    if session_id.is_empty()
+        || session_id.contains('/')
+        || session_id.contains(std::path::MAIN_SEPARATOR)
+        || session_id == "."
+        || session_id == ".."
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "invalid session_id",
+        ));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -165,5 +182,19 @@ mod tests {
     fn from_env_path_ends_with_claude_attention() {
         let store = StateStore::from_env();
         assert!(store.dir().ends_with("claude-attention"));
+    }
+
+    #[test]
+    fn write_rejects_path_traversal_session_id() {
+        let dir = TempDir::new().unwrap();
+        let store = StateStore::new(dir.path().into());
+        let entry = sample_entry("p");
+        for bad in ["../escape", "a/b", "..", ".", ""] {
+            let err = store.write(bad, &entry).unwrap_err();
+            assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput, "bad id: {bad:?}");
+        }
+        // Also confirm remove rejects:
+        let err = store.remove("../escape").unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
     }
 }

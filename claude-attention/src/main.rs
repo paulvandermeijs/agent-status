@@ -96,5 +96,7 @@ fn run_list(store: &StateStore, out: &mut impl Write) -> io::Result<()> {
 fn refresh_tmux() {
     let _ = std::process::Command::new("tmux")
         .args(["refresh-client", "-S"])
+        .stderr(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
         .status();
 }
