@@ -159,8 +159,8 @@ mod tests {
     }
 
     #[test]
-    fn from_env_uses_xdg_runtime_dir() {
-        let store = StateStore::new(std::path::PathBuf::from("/tmp/foo/claude-attention"));
+    fn from_env_path_ends_with_claude_attention() {
+        let store = StateStore::from_env();
         assert!(store.dir().ends_with("claude-attention"));
     }
 }
