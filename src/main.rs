@@ -5,29 +5,54 @@ use std::io::{self, Read, Write};
 use std::process::ExitCode;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use clap::{Parser, Subcommand};
+
 use commands::{build_entry, extract_session_id, format_list, format_status};
 use state::StateStore;
 
+/// Tmux-integrated indicator showing which Claude Code sessions are waiting on user input.
+///
+/// Claude Code hooks call `set` (Notification, Stop) and `clear` (UserPromptSubmit,
+/// SessionStart, SessionEnd) with the hook event payload on stdin. tmux `status-right`
+/// calls `status` periodically; the popup picker calls `list`.
+#[derive(Parser)]
+#[command(version, about, long_about = None)]
+struct Cli {
+    #[command(subcommand)]
+    command: Cmd,
+}
+
+#[derive(Subcommand)]
+enum Cmd {
+    /// Mark this Claude session as waiting on user attention.
+    ///
+    /// Reads the hook event JSON from stdin and stores an entry keyed by `session_id`.
+    /// If `session_id` is missing or empty, exits 0 silently.
+    Set {
+        /// Event label stored with the entry (e.g. `notify`, `done`).
+        #[arg(default_value = "attention")]
+        event: String,
+    },
+    /// Clear this Claude session's attention state.
+    ///
+    /// Reads the hook event JSON from stdin and removes the entry keyed by `session_id`.
+    /// If `session_id` is missing or empty, exits 0 silently.
+    Clear,
+    /// Print the tmux status-right line. Empty output if no sessions are waiting.
+    Status,
+    /// Print TSV (pane, project, event) of all waiting sessions, one per line.
+    List,
+}
+
 fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().collect();
+    let cli = Cli::parse();
     let store = StateStore::from_env();
 
-    let result = match args.get(1).map(String::as_str) {
-        Some("set") => {
-            let event = args.get(2).map(String::as_str).unwrap_or("attention");
-            run_set(&store, event)
-        }
-        Some("clear") => run_clear(&store),
-        Some("status") => run_status(&store, &mut io::stdout().lock()),
-        Some("list") => run_list(&store, &mut io::stdout().lock()),
-        Some(other) => {
-            eprintln!("claude-status: unknown subcommand: {other}");
-            return ExitCode::from(2);
-        }
-        None => {
-            eprintln!("usage: claude-status <set [event]|clear|status|list>");
-            return ExitCode::from(2);
-        }
+    let result = match cli.command {
+        Cmd::Set { event } => run_set(&store, &event),
+        Cmd::Clear => run_clear(&store),
+        Cmd::Status => run_status(&store, &mut io::stdout().lock()),
+        Cmd::List => run_list(&store, &mut io::stdout().lock()),
     };
 
     match result {
