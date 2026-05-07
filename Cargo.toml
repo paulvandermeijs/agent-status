@@ -1,10 +1,11 @@
 [package]
-name = "claude-attention"
+name = "claude-status"
 version = "0.1.0"
 edition = "2021"
+description = "Tmux-integrated indicator showing which Claude Code sessions are waiting on user input."
 
 [[bin]]
-name = "claude-attention"
+name = "claude-status"
 path = "src/main.rs"
 
 [dependencies]

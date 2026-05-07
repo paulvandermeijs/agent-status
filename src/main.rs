@@ -21,11 +21,11 @@ fn main() -> ExitCode {
         Some("status") => run_status(&store, &mut io::stdout().lock()),
         Some("list") => run_list(&store, &mut io::stdout().lock()),
         Some(other) => {
-            eprintln!("claude-attention: unknown subcommand: {other}");
+            eprintln!("claude-status: unknown subcommand: {other}");
             return ExitCode::from(2);
         }
         None => {
-            eprintln!("usage: claude-attention <set [event]|clear|status|list>");
+            eprintln!("usage: claude-status <set [event]|clear|status|list>");
             return ExitCode::from(2);
         }
     };
@@ -33,7 +33,7 @@ fn main() -> ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
-            eprintln!("claude-attention: {e}");
+            eprintln!("claude-status: {e}");
             ExitCode::from(1)
         }
     }

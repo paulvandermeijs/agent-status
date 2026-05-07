@@ -3,7 +3,7 @@ use std::process::{Command, Stdio};
 use tempfile::TempDir;
 
 fn bin() -> &'static str {
-    env!("CARGO_BIN_EXE_claude-attention")
+    env!("CARGO_BIN_EXE_claude-status")
 }
 
 fn run(state_dir: &std::path::Path, args: &[&str], stdin: Option<&str>) -> (String, String, i32) {
@@ -39,7 +39,7 @@ fn run(state_dir: &std::path::Path, args: &[&str], stdin: Option<&str>) -> (Stri
 #[test]
 fn end_to_end_set_status_clear() {
     let tmp = TempDir::new().unwrap();
-    let state_dir = tmp.path().join("claude-attention");
+    let state_dir = tmp.path().join("claude-status");
 
     let (stdout, _, code) = run(&state_dir, &["status"], None);
     assert_eq!(code, 0);
@@ -71,7 +71,7 @@ fn end_to_end_set_status_clear() {
 #[test]
 fn unknown_subcommand_exits_2() {
     let tmp = TempDir::new().unwrap();
-    let state_dir = tmp.path().join("claude-attention");
+    let state_dir = tmp.path().join("claude-status");
     let (_, stderr, code) = run(&state_dir, &["frobnicate"], None);
     assert_eq!(code, 2);
     assert!(stderr.contains("unknown subcommand"));
@@ -80,7 +80,7 @@ fn unknown_subcommand_exits_2() {
 #[test]
 fn set_with_empty_session_id_is_noop() {
     let tmp = TempDir::new().unwrap();
-    let state_dir = tmp.path().join("claude-attention");
+    let state_dir = tmp.path().join("claude-status");
     let (_, _, code) = run(
         &state_dir,
         &["set", "notify"],

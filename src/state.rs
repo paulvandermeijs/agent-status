@@ -25,7 +25,7 @@ impl StateStore {
         let base = std::env::var_os("XDG_RUNTIME_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("/tmp"));
-        Self::new(base.join("claude-attention"))
+        Self::new(base.join("claude-status"))
     }
 
     #[allow(dead_code)]
@@ -179,9 +179,9 @@ mod tests {
     }
 
     #[test]
-    fn from_env_path_ends_with_claude_attention() {
+    fn from_env_path_ends_with_claude_status() {
         let store = StateStore::from_env();
-        assert!(store.dir().ends_with("claude-attention"));
+        assert!(store.dir().ends_with("claude-status"));
     }
 
     #[test]
