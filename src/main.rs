@@ -12,8 +12,8 @@ use state::StateStore;
 
 /// Tmux-integrated indicator showing which Claude Code sessions are waiting on user input.
 ///
-/// Claude Code hooks call `set` (Notification, Stop) and `clear` (UserPromptSubmit,
-/// SessionStart, SessionEnd) with the hook event payload on stdin. tmux `status-right`
+/// Claude Code hooks call `set` (`Notification`, `Stop`) and `clear` (`UserPromptSubmit`,
+/// `SessionStart`, `SessionEnd`) with the hook event payload on stdin. tmux `status-right`
 /// calls `status` periodically; the popup picker calls `list`.
 #[derive(Parser)]
 #[command(version, about, long_about = None)]

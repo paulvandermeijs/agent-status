@@ -1,38 +1,62 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
+/// One entry stored per active Claude Code session that is waiting on user attention.
+///
+/// Serialized as compact JSON to one file per session (keyed by `session_id`) under
+/// `${XDG_RUNTIME_DIR:-/tmp}/claude-status/`. The field shape is wire-compatible with
+/// the bash version of this tool.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct AttentionEntry {
+    /// Basename of the project directory (typically the cwd's last component).
     pub project: String,
+    /// Absolute path of the project directory at the time the hook fired.
     pub cwd: String,
+    /// Hook event label, for example `notify` or `done`.
     pub event: String,
+    /// Tmux pane id (such as `%17`), or empty if the hook fired outside tmux.
     pub tmux_pane: String,
+    /// Unix timestamp (seconds) when the entry was written.
     pub ts: u64,
 }
 
+/// Reads, writes and lists [`AttentionEntry`] files under a single state directory.
+///
+/// Each session writes one file keyed by its `session_id`, so concurrent writers from
+/// different sessions never contend on the same path — no locking is required.
 pub struct StateStore {
     dir: PathBuf,
 }
 
 impl StateStore {
+    /// Construct a store backed by `dir`.
+    ///
+    /// The directory does not need to exist yet — [`write`](Self::write) creates it on demand.
     pub fn new(dir: PathBuf) -> Self {
         Self { dir }
     }
 
+    /// Construct a store under `${XDG_RUNTIME_DIR:-/tmp}/claude-status/`.
     pub fn from_env() -> Self {
         let base = std::env::var_os("XDG_RUNTIME_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from("/tmp"));
+            .map_or_else(|| PathBuf::from("/tmp"), PathBuf::from);
         Self::new(base.join("claude-status"))
     }
 
-    #[allow(dead_code)]
-    pub fn dir(&self) -> &Path {
+    /// Path of the state directory.
+    #[cfg(test)]
+    pub fn dir(&self) -> &std::path::Path {
         &self.dir
     }
 
+    /// Write an entry for `session_id`, creating the state directory if needed.
+    ///
+    /// # Errors
+    /// Returns the underlying I/O error if the directory cannot be created or the file cannot
+    /// be written. Returns [`io::ErrorKind::InvalidInput`] when `session_id` is empty or
+    /// contains a path separator (defense against path-traversal).
     pub fn write(&self, session_id: &str, entry: &AttentionEntry) -> io::Result<()> {
         validate_session_id(session_id)?;
         fs::create_dir_all(&self.dir)?;
@@ -41,6 +65,12 @@ impl StateStore {
         fs::write(self.dir.join(session_id), json)
     }
 
+    /// Remove the entry for `session_id`. Idempotent: returns `Ok(())` when the file is absent.
+    ///
+    /// # Errors
+    /// Returns the underlying I/O error if removal fails for a reason other than `NotFound`.
+    /// Returns [`io::ErrorKind::InvalidInput`] when `session_id` is empty or contains a
+    /// path separator.
     pub fn remove(&self, session_id: &str) -> io::Result<()> {
         validate_session_id(session_id)?;
         match fs::remove_file(self.dir.join(session_id)) {
@@ -50,6 +80,14 @@ impl StateStore {
         }
     }
 
+    /// List all entries in the state directory, sorted by timestamp ascending then `session_id`.
+    ///
+    /// Files with invalid JSON or unreadable content are silently skipped — they are treated
+    /// as if absent. Returns an empty `Vec` when the directory does not exist.
+    ///
+    /// # Errors
+    /// Returns the underlying I/O error if `read_dir` or per-entry metadata access fails for
+    /// a reason other than `NotFound`.
     pub fn list(&self) -> io::Result<Vec<(String, AttentionEntry)>> {
         let iter = match fs::read_dir(&self.dir) {
             Ok(it) => it,
@@ -63,9 +101,8 @@ impl StateStore {
                 continue;
             }
             let name = entry.file_name().to_string_lossy().into_owned();
-            let bytes = match fs::read(entry.path()) {
-                Ok(b) => b,
-                Err(_) => continue,
+            let Ok(bytes) = fs::read(entry.path()) else {
+                continue;
             };
             if let Ok(parsed) = serde_json::from_slice::<AttentionEntry>(&bytes) {
                 out.push((name, parsed));
@@ -193,7 +230,6 @@ mod tests {
             let err = store.write(bad, &entry).unwrap_err();
             assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput, "bad id: {bad:?}");
         }
-        // Also confirm remove rejects:
         let err = store.remove("../escape").unwrap_err();
         assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
     }

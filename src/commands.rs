@@ -1,17 +1,25 @@
 use crate::state::AttentionEntry;
 use std::path::Path;
 
+/// Extract `session_id` from a JSON object.
+///
+/// Returns `None` for any of: invalid JSON, missing `session_id` field, non-string value,
+/// or empty string. The empty-string case is treated as missing because Claude Code hooks
+/// occasionally fire with no session id and we want to silently no-op rather than fail.
 pub fn extract_session_id(stdin_json: &str) -> Option<String> {
     let v: serde_json::Value = serde_json::from_str(stdin_json).ok()?;
     let id = v.get("session_id")?.as_str()?;
     if id.is_empty() { None } else { Some(id.to_string()) }
 }
 
+/// Construct an [`AttentionEntry`] from raw inputs.
+///
+/// `project` is derived as the basename of `cwd`. When `cwd` has no basename (e.g. `/`
+/// or empty string), `project` falls back to `cwd` itself.
 pub fn build_entry(event: &str, cwd: &str, tmux_pane: &str, ts: u64) -> AttentionEntry {
     let project = Path::new(cwd)
         .file_name()
-        .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_else(|| cwd.to_string());
+        .map_or_else(|| cwd.to_string(), |s| s.to_string_lossy().into_owned());
     AttentionEntry {
         project,
         cwd: cwd.to_string(),
@@ -21,6 +29,11 @@ pub fn build_entry(event: &str, cwd: &str, tmux_pane: &str, ts: u64) -> Attentio
     }
 }
 
+/// Format the tmux `status-right` line for the given entries.
+///
+/// Returns `None` when there are no entries so the caller can omit the line entirely.
+/// One entry shows the project name; multiple entries show a count. The leading
+/// `#[fg=yellow,bold]` is a tmux color escape, not a Rust attribute.
 pub fn format_status(entries: &[(String, AttentionEntry)]) -> Option<String> {
     match entries.len() {
         0 => None,
@@ -29,6 +42,10 @@ pub fn format_status(entries: &[(String, AttentionEntry)]) -> Option<String> {
     }
 }
 
+/// Format the popup picker output: tab-separated `pane\tproject\tevent\n` per entry.
+///
+/// Field order matches the bash version's `jq -r '[.tmux_pane, .project, .event] | @tsv'`.
+/// The trailing newline is included on every line, including the last.
 pub fn format_list(entries: &[(String, AttentionEntry)]) -> String {
     let mut out = String::new();
     for (_, e) in entries {
