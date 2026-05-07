@@ -28,6 +28,7 @@ impl StateStore {
         Self::new(base.join("claude-attention"))
     }
 
+    #[allow(dead_code)]
     pub fn dir(&self) -> &Path {
         &self.dir
     }
