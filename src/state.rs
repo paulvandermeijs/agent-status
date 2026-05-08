@@ -10,6 +10,8 @@ use std::path::PathBuf;
 /// the bash version of this tool.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct AttentionEntry {
+    /// Stable identifier of the agent that wrote this entry (e.g. `"claude-code"`).
+    pub agent: String,
     /// Basename of the project directory (typically the cwd's last component).
     pub project: String,
     /// Absolute path of the project directory at the time the hook fired.
@@ -136,6 +138,7 @@ mod tests {
     #[test]
     fn entry_roundtrips_through_json() {
         let entry = AttentionEntry {
+            agent: "claude-code".into(),
             project: "claude-status".into(),
             cwd: "/Users/x/work/claude-status".into(),
             event: "notify".into(),
@@ -150,6 +153,7 @@ mod tests {
     #[test]
     fn entry_matches_bash_plan_field_names() {
         let entry = AttentionEntry {
+            agent: "claude-code".into(),
             project: "p".into(),
             cwd: "/c".into(),
             event: "done".into(),
@@ -157,15 +161,19 @@ mod tests {
             ts: 1,
         };
         let v: serde_json::Value = serde_json::to_value(&entry).unwrap();
+        // Original fields from the bash precursor — must not be renamed/removed.
         assert!(v.get("project").is_some());
         assert!(v.get("cwd").is_some());
         assert!(v.get("event").is_some());
         assert!(v.get("tmux_pane").is_some());
         assert!(v.get("ts").is_some());
+        // New attribution field added when this CLI grew multi-agent support.
+        assert!(v.get("agent").is_some());
     }
 
     fn sample_entry(project: &str) -> AttentionEntry {
         AttentionEntry {
+            agent: "claude-code".into(),
             project: project.into(),
             cwd: format!("/x/{project}"),
             event: "notify".into(),

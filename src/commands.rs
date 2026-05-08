@@ -21,6 +21,7 @@ pub fn build_entry(event: &str, cwd: &str, tmux_pane: &str, ts: u64) -> Attentio
         .file_name()
         .map_or_else(|| cwd.to_string(), |s| s.to_string_lossy().into_owned());
     AttentionEntry {
+        agent: "claude-code".into(),
         project,
         cwd: cwd.to_string(),
         event: event.to_string(),
@@ -65,6 +66,7 @@ mod tests {
 
     fn entry(project: &str, pane: &str, event: &str) -> AttentionEntry {
         AttentionEntry {
+            agent: "claude-code".into(),
             project: project.into(),
             cwd: format!("/x/{project}"),
             event: event.into(),
