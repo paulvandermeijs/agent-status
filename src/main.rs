@@ -14,10 +14,10 @@ use state::StateStore;
 /// Tmux-integrated indicator showing which AI coding agent sessions are waiting on user input.
 ///
 /// Each agent's hooks invoke `set`/`clear` with `--agent <name>`; `status` and `list` are
-/// agent-neutral and aggregate state from every agent. Currently registered: `claude-code`.
-/// Claude Code's hooks: `set` on `Notification` / `Stop`; `clear` on `UserPromptSubmit` /
-/// `SessionStart` / `SessionEnd`. tmux `status-right` calls `status` periodically; the
-/// popup picker calls `list`.
+/// agent-neutral and aggregate state from every agent. Currently registered: `claude-code`,
+/// `pi-coding-agent`. Claude Code's hooks: `set` on `Notification` / `Stop`; `clear` on
+/// `UserPromptSubmit` / `SessionStart` / `SessionEnd`. tmux `status-right` calls `status`
+/// periodically; the popup picker calls `list`.
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Cli {
