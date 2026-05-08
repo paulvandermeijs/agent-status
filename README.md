@@ -144,6 +144,7 @@ cargo build --release                                        # ~500 KB stripped 
 ## Caveats
 
 - **The `Stop` hook fires on every turn end**, so any session that just finished a response shows up as "waiting" until you send the next prompt. Intentional — the whole point is to know which session needs you while you're heads-down elsewhere. Drop the `Stop` line from `settings.json` if it proves too eager.
+- **opencode has no "user submitted a prompt" event**, so once `session.idle` marks an opencode session `done`, the indicator stays on `done` while you type the next prompt and only refreshes its timestamp on the next idle. Same intent as the `Stop` caveat above — the session *is* the one waiting on you.
 - **Stale state on abnormal exit.** If a Claude Code process dies without firing its session-end hook, its state file lingers. macOS's tmpwatch and reboots eventually clean `/tmp`; on Linux with `XDG_RUNTIME_DIR`, files vanish at logout.
 - **Architecture-specific binary.** The compiled binary is platform-locked. On a new machine, rebuild from source.
 
