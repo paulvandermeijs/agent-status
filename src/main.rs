@@ -1,3 +1,4 @@
+mod agents;
 mod commands;
 mod state;
 
@@ -7,7 +8,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use clap::{Parser, Subcommand};
 
-use commands::{build_entry, extract_session_id, format_list, format_status};
+use agents::Agent;
+use agents::claude_code::ClaudeCodeAgent;
+use commands::{build_entry, format_list, format_status};
 use state::StateStore;
 
 /// Tmux-integrated indicator showing which Claude Code sessions are waiting on user input.
@@ -47,10 +50,12 @@ enum Cmd {
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let store = StateStore::from_env();
+    let agent: &dyn Agent = &ClaudeCodeAgent;
+    debug_assert_eq!(agent.name(), "claude-code");
 
     let result = match cli.command {
-        Cmd::Set { event } => run_set(&store, &event),
-        Cmd::Clear => run_clear(&store),
+        Cmd::Set { event } => run_set(&store, agent, &event),
+        Cmd::Clear => run_clear(&store, agent),
         Cmd::Status => run_status(&store, &mut io::stdout().lock()),
         Cmd::List => run_list(&store, &mut io::stdout().lock()),
     };
@@ -64,11 +69,11 @@ fn main() -> ExitCode {
     }
 }
 
-fn run_set(store: &StateStore, event: &str) -> io::Result<()> {
+fn run_set(store: &StateStore, agent: &dyn Agent, event: &str) -> io::Result<()> {
     let mut buf = String::new();
     io::stdin().read_to_string(&mut buf)?;
 
-    let Some(session_id) = extract_session_id(&buf) else {
+    let Some(session_id) = agent.extract_session_id(&buf) else {
         return Ok(());
     };
 
@@ -93,10 +98,10 @@ fn run_set(store: &StateStore, event: &str) -> io::Result<()> {
     Ok(())
 }
 
-fn run_clear(store: &StateStore) -> io::Result<()> {
+fn run_clear(store: &StateStore, agent: &dyn Agent) -> io::Result<()> {
     let mut buf = String::new();
     io::stdin().read_to_string(&mut buf)?;
-    let Some(session_id) = extract_session_id(&buf) else {
+    let Some(session_id) = agent.extract_session_id(&buf) else {
         return Ok(());
     };
     store.remove(&session_id)?;
