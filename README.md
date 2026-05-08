@@ -1,6 +1,6 @@
 # agent-status
 
-A small Rust CLI that shows in tmux's `status-right` which AI coding agent sessions are waiting on user input. Currently supports Claude Code; the architecture is set up to plug in additional agents (Codex CLI, Cursor CLI, OpenCode) without restructuring.
+A small Rust CLI that shows in tmux's `status-right` which AI coding agent sessions are waiting on user input. Supports [Claude Code](https://claude.com/claude-code) and [pi](https://pi.dev); the architecture is set up to plug in additional agents (Codex CLI, Cursor CLI, OpenCode) without restructuring.
 
 ```text
 $ agent-status status        # one session waiting
@@ -47,6 +47,28 @@ Merge the following into the top-level `hooks` block:
 }
 ```
 
+### pi (`~/.pi/agent/extensions/`)
+
+Pi extensions run in-process, so the integration ships as a single TypeScript file you drop into pi's auto-discovery directory. Copy `extensions/pi-coding-agent.ts` from this repo:
+
+```sh
+mkdir -p ~/.pi/agent/extensions
+cp extensions/pi-coding-agent.ts ~/.pi/agent/extensions/
+```
+
+Pi auto-discovers `~/.pi/agent/extensions/*.ts` on startup; no further configuration is required. The extension fires on these pi lifecycle events:
+
+| pi event              | agent-status call                              |
+|-----------------------|------------------------------------------------|
+| `before_agent_start`  | `clear --agent pi-coding-agent` (user submitted a prompt) |
+| `agent_end`           | `set --agent pi-coding-agent done` (agent finished a turn) |
+| `session_start`       | `clear --agent pi-coding-agent`                |
+| `session_shutdown`    | `clear --agent pi-coding-agent`                |
+
+If your `agent-status` binary is not at `~/.claude/bin/agent-status`, set `AGENT_STATUS_BIN` in your shell environment before launching pi.
+
+**Known limitation:** pi has no built-in "agent paused waiting for permission" event analogous to Claude Code's `Notification` hook — pi extensions handle confirmations in-process via `ctx.ui.confirm()`. So pi-coding-agent surfaces the "done" state but not a separate "needs attention" state. In practice the dominant signal is "agent finished a turn, waiting on next prompt" anyway.
+
 ### tmux (`~/.tmux.conf`)
 
 Drop `#($HOME/.claude/bin/agent-status status)` into your existing `status-right` wherever you want the indicator to appear, and lower the refresh interval so updates feel snappy:
@@ -86,6 +108,8 @@ agent-status list                         # print TSV (pane, project, event) per
 ```json
 {"agent":"claude-code","project":"agent-status","cwd":"/path/to/project","event":"notify","tmux_pane":"%17","ts":1778163565}
 ```
+
+The `agent` field is `"claude-code"` or `"pi-coding-agent"`; new agents use their own lowercase-hyphenated name.
 
 ## Development
 
