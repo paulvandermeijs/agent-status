@@ -6,7 +6,7 @@ use std::path::PathBuf;
 /// One entry stored per active Claude Code session that is waiting on user attention.
 ///
 /// Serialized as compact JSON to one file per session (keyed by `session_id`) under
-/// `${XDG_RUNTIME_DIR:-/tmp}/claude-status/`. The field shape is wire-compatible with
+/// `${XDG_RUNTIME_DIR:-/tmp}/agent-status/`. The field shape is wire-compatible with
 /// the bash version of this tool.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct AttentionEntry {
@@ -40,11 +40,11 @@ impl StateStore {
         Self { dir }
     }
 
-    /// Construct a store under `${XDG_RUNTIME_DIR:-/tmp}/claude-status/`.
+    /// Construct a store under `${XDG_RUNTIME_DIR:-/tmp}/agent-status/`.
     pub fn from_env() -> Self {
         let base = std::env::var_os("XDG_RUNTIME_DIR")
             .map_or_else(|| PathBuf::from("/tmp"), PathBuf::from);
-        Self::new(base.join("claude-status"))
+        Self::new(base.join("agent-status"))
     }
 
     /// Path of the state directory.
@@ -224,9 +224,9 @@ mod tests {
     }
 
     #[test]
-    fn from_env_path_ends_with_claude_status() {
+    fn from_env_path_ends_with_agent_status() {
         let store = StateStore::from_env();
-        assert!(store.dir().ends_with("claude-status"));
+        assert!(store.dir().ends_with("agent-status"));
     }
 
     #[test]
