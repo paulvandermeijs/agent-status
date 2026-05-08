@@ -15,7 +15,7 @@ $ claude-status status        # nothing waiting
 
 ## How it works
 
-Claude Code [hooks][hooks] fire `claude-status set` on `Notification` and `Stop`, and `claude-status clear` on `UserPromptSubmit` / `SessionStart` / `SessionEnd`. Each `set` writes one JSON file per session under `${XDG_RUNTIME_DIR:-/tmp}/claude-status/`, keyed by `session_id`. tmux's `status-right` runs `claude-status status` every 5 seconds and prints the count of files in that directory.
+Claude Code [hooks][hooks] fire `claude-status set` on `Notification` and `Stop`, and `claude-status clear` on `UserPromptSubmit` / `SessionStart` / `SessionEnd`. Each `set` writes one JSON file per session under `${XDG_RUNTIME_DIR:-/tmp}/claude-status/`, keyed by `session_id`. tmux's `status-right` invokes `claude-status status` on its refresh interval; the command lists the state directory and renders the indicator (project name for one waiting session, count for many, nothing for none).
 
 No daemon. The filesystem is the state store; each session writes only its own keyed file, so concurrent writers never contend.
 
@@ -23,10 +23,11 @@ No daemon. The filesystem is the state store; each session writes only its own k
 
 ```sh
 cargo build --release
+mkdir -p ~/.claude/bin
 install -m 0755 target/release/claude-status ~/.claude/bin/claude-status
 ```
 
-The binary is around 500 KB and has no runtime dependencies (tmux is invoked best-effort to refresh the status bar; if it isn't running, the failure is silenced).
+`~/.claude/bin` is one option; any directory works as long as the absolute path matches what you put in the hook commands and tmux config below. The binary is around 500 KB and has no runtime dependencies (tmux is invoked best-effort to refresh the status bar; if it isn't running, the failure is silenced).
 
 ## Configure
 
@@ -48,11 +49,17 @@ Merge the following into the top-level `hooks` block:
 
 ### tmux (`~/.tmux.conf`)
 
+Drop `#($HOME/.claude/bin/claude-status status)` into your existing `status-right` wherever you want the indicator to appear, and lower the refresh interval so updates feel snappy:
+
 ```tmux
 set -g status-interval 5
-set -g status-right "#($HOME/.claude/bin/claude-status status)  %H:%M %d-%b-%y "
+# example: prepend the indicator to whatever status-right you already use
+set -g status-right "#($HOME/.claude/bin/claude-status status) <your existing status-right here>"
+```
 
-# popup picker (prefix + C-a) — needs fzf
+Optional popup picker (prefix + `C-a`) for jumping to the waiting pane — requires `fzf`:
+
+```tmux
 bind-key C-a display-popup -E -w 60% -h 40% \
   "$HOME/.claude/bin/claude-status list | fzf --with-nth=2.. --delimiter='\\t' --prompt='Jump to> ' \
     | cut -f1 | xargs -r -I{} tmux switch-client -t {}"
