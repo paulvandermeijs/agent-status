@@ -37,8 +37,8 @@ pub fn build_entry(event: &str, cwd: &str, tmux_pane: &str, ts: u64) -> Attentio
 pub fn format_status(entries: &[(String, AttentionEntry)]) -> Option<String> {
     match entries.len() {
         0 => None,
-        1 => Some(format!("🔔 {}", entries[0].1.project)),
-        n => Some(format!("🔔 {n} projects waiting")),
+        1 => Some(format!("[!] {}", entries[0].1.project)),
+        n => Some(format!("[!] {n} projects waiting")),
     }
 }
 
@@ -118,7 +118,7 @@ mod tests {
     #[test]
     fn format_status_single_entry_shows_project_name() {
         let entries = vec![("s1".into(), entry("alpha", "%1", "notify"))];
-        assert_eq!(format_status(&entries).as_deref(), Some("🔔 alpha"));
+        assert_eq!(format_status(&entries).as_deref(), Some("[!] alpha"));
     }
 
     #[test]
@@ -130,7 +130,7 @@ mod tests {
         ];
         assert_eq!(
             format_status(&entries).as_deref(),
-            Some("🔔 3 projects waiting")
+            Some("[!] 3 projects waiting")
         );
     }
 
