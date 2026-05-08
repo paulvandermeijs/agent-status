@@ -3,8 +3,14 @@
 A small Rust CLI that shows in tmux's `status-right` which Claude Code sessions are waiting on user input.
 
 ```text
-[!] claude-status   14:23 08-May-26     # one session waiting
-[!] 3 projects waiting   14:23 08-May-26 # multiple
+$ claude-status status        # one session waiting
+[!] claude-status
+
+$ claude-status status        # multiple sessions waiting
+[!] 3 projects waiting
+
+$ claude-status status        # nothing waiting
+                              # (no output, exit 0)
 ```
 
 ## How it works
