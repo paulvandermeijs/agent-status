@@ -25,7 +25,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
-    /// Mark this Claude session as waiting on user attention.
+    /// Mark this agent session as waiting on user attention.
     ///
     /// Reads the hook event JSON from stdin and stores an entry keyed by `session_id`.
     /// If `session_id` is missing or empty, exits 0 silently.
