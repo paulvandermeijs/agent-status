@@ -1,17 +1,6 @@
 use crate::state::AttentionEntry;
 use std::path::Path;
 
-/// Extract `session_id` from a JSON object.
-///
-/// Returns `None` for any of: invalid JSON, missing `session_id` field, non-string value,
-/// or empty string. The empty-string case is treated as missing because Claude Code hooks
-/// occasionally fire with no session id and we want to silently no-op rather than fail.
-pub fn extract_session_id(stdin_json: &str) -> Option<String> {
-    let v: serde_json::Value = serde_json::from_str(stdin_json).ok()?;
-    let id = v.get("session_id")?.as_str()?;
-    if id.is_empty() { None } else { Some(id.to_string()) }
-}
-
 /// Construct an [`AttentionEntry`] from raw inputs.
 ///
 /// `project` is derived as the basename of `cwd`. When `cwd` has no basename (e.g. `/`
@@ -79,27 +68,6 @@ mod tests {
             tmux_pane: pane.into(),
             ts: 1,
         }
-    }
-
-    #[test]
-    fn extract_session_id_returns_id() {
-        let json = r#"{"session_id":"abc-123","other":"stuff"}"#;
-        assert_eq!(extract_session_id(json).as_deref(), Some("abc-123"));
-    }
-
-    #[test]
-    fn extract_session_id_returns_none_for_missing() {
-        assert_eq!(extract_session_id(r#"{"other":1}"#), None);
-    }
-
-    #[test]
-    fn extract_session_id_returns_none_for_empty_string() {
-        assert_eq!(extract_session_id(r#"{"session_id":""}"#), None);
-    }
-
-    #[test]
-    fn extract_session_id_returns_none_for_invalid_json() {
-        assert_eq!(extract_session_id("not json"), None);
     }
 
     #[test]

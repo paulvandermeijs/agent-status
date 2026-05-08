@@ -1,5 +1,4 @@
 use crate::agents::Agent;
-use crate::commands::extract_session_id;
 
 /// Claude Code (`claude.ai/code`).
 ///
@@ -12,7 +11,13 @@ impl Agent for ClaudeCodeAgent {
     }
 
     fn extract_session_id(&self, stdin_json: &str) -> Option<String> {
-        extract_session_id(stdin_json)
+        let v: serde_json::Value = serde_json::from_str(stdin_json).ok()?;
+        let id = v.get("session_id")?.as_str()?;
+        if id.is_empty() {
+            None
+        } else {
+            Some(id.to_string())
+        }
     }
 }
 

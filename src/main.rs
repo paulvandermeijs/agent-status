@@ -8,8 +8,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use clap::{Parser, Subcommand};
 
-use agents::Agent;
-use agents::claude_code::ClaudeCodeAgent;
 use commands::{build_entry, format_list, format_status};
 use state::StateStore;
 
@@ -35,12 +33,19 @@ enum Cmd {
         /// Event label stored with the entry (e.g. `notify`, `done`).
         #[arg(default_value = "attention")]
         event: String,
+        /// Identifier of the agent invoking the hook (e.g. `claude-code`).
+        #[arg(long, default_value = "claude-code")]
+        agent: String,
     },
-    /// Clear this Claude session's attention state.
+    /// Clear this agent session's attention state.
     ///
-    /// Reads the hook event JSON from stdin and removes the entry keyed by `session_id`.
-    /// If `session_id` is missing or empty, exits 0 silently.
-    Clear,
+    /// Reads the hook event JSON from stdin and removes the entry keyed by the agent's
+    /// session identifier. If the field is missing or empty, exits 0 silently.
+    Clear {
+        /// Identifier of the agent invoking the hook (e.g. `claude-code`).
+        #[arg(long, default_value = "claude-code")]
+        agent: String,
+    },
     /// Print the tmux status-right line. Empty output if no sessions are waiting.
     Status,
     /// Print TSV (pane, project, event) of all waiting sessions, one per line.
@@ -50,14 +55,10 @@ enum Cmd {
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let store = StateStore::from_env();
-    let agent: &dyn Agent = &ClaudeCodeAgent;
-    debug_assert_eq!(agent.name(), "claude-code");
-    // Placeholder until Task 5 wires --agent routing; keeps `by_name` reachable for clippy.
-    let _ = agents::by_name("claude-code");
 
     let result = match cli.command {
-        Cmd::Set { event } => run_set(&store, agent, &event),
-        Cmd::Clear => run_clear(&store, agent),
+        Cmd::Set { event, agent } => run_set(&store, &agent, &event),
+        Cmd::Clear { agent } => run_clear(&store, &agent),
         Cmd::Status => run_status(&store, &mut io::stdout().lock()),
         Cmd::List => run_list(&store, &mut io::stdout().lock()),
     };
@@ -71,7 +72,14 @@ fn main() -> ExitCode {
     }
 }
 
-fn run_set(store: &StateStore, agent: &dyn Agent, event: &str) -> io::Result<()> {
+fn run_set(store: &StateStore, agent_name: &str, event: &str) -> io::Result<()> {
+    let Some(agent) = agents::by_name(agent_name) else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("unknown agent: {agent_name}"),
+        ));
+    };
+
     let mut buf = String::new();
     io::stdin().read_to_string(&mut buf)?;
 
@@ -94,13 +102,20 @@ fn run_set(store: &StateStore, agent: &dyn Agent, event: &str) -> io::Result<()>
         .map(|d| d.as_secs())
         .unwrap_or(0);
 
-    let entry = build_entry("claude-code", event, &cwd, &pane, ts);
+    let entry = build_entry(agent.name(), event, &cwd, &pane, ts);
     store.write(&session_id, &entry)?;
     refresh_tmux();
     Ok(())
 }
 
-fn run_clear(store: &StateStore, agent: &dyn Agent) -> io::Result<()> {
+fn run_clear(store: &StateStore, agent_name: &str) -> io::Result<()> {
+    let Some(agent) = agents::by_name(agent_name) else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("unknown agent: {agent_name}"),
+        ));
+    };
+
     let mut buf = String::new();
     io::stdin().read_to_string(&mut buf)?;
     let Some(session_id) = agent.extract_session_id(&buf) else {
