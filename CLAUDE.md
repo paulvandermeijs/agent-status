@@ -28,7 +28,7 @@ The crate has `[lints.rust]` (`unsafe_code = "forbid"`, `nonstandard_style = "de
 Three files with a deliberate division of labor — preserve it when adding logic:
 
 - `src/state.rs` — owns all filesystem I/O. `AttentionEntry` (the on-disk struct) and `StateStore` (read/write/list state files). Tests use `tempfile::TempDir` for isolation.
-- `src/commands.rs` — purely pure helpers (`extract_session_id`, `build_entry`, `format_status`, `format_list`). No `std::env`, `std::io`, `std::time`, or `std::fs` imports — that's what makes the bulk of the logic unit-testable.
+- `src/commands.rs` — purely pure helpers (`build_entry`, `format_status`, `format_list`). No `std::env`, `std::io`, `std::time`, or `std::fs` imports — that's what makes the bulk of the logic unit-testable.
 - `src/main.rs` — the impure adapter. clap `Parser`/`Subcommand` derives plus `run_*` glue functions that read stdin/env/time and call into the pure helpers.
 - `src/agents/mod.rs` — defines the `Agent` trait (`name()` + `extract_session_id()`) and the `by_name` registry that resolves the `--agent` flag to a concrete impl.
 - `src/agents/claude_code.rs` — `ClaudeCodeAgent` implementing `Agent` for Claude Code hook payloads.
