@@ -54,7 +54,7 @@ fn end_to_end_set_status_clear() {
 
     let (stdout, _, code) = run(&state_dir, &["status"], None);
     assert_eq!(code, 0);
-    assert!(stdout.starts_with("#[fg=yellow,bold]🔔 "), "got: {stdout:?}");
+    assert!(stdout.starts_with("🔔 "), "got: {stdout:?}");
 
     let (_, _, code) = run(
         &state_dir,
