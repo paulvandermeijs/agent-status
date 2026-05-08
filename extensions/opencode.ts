@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawnSync } from "node:child_process";
 
 /**
  * Bridges opencode lifecycle events to the `agent-status` CLI so opencode
@@ -47,11 +47,15 @@ function fire(
       ? ["set", "--agent", "opencode", event!]
       : ["clear", "--agent", "opencode"];
 
-  const child = spawn(BIN, args, {
+  // spawnSync rather than spawn: in `opencode run` headless mode the parent
+  // exits immediately after `session.idle` and an async child has no time to
+  // execute. Blocking ~5-50ms here is invisible in practice and works in TUI
+  // mode too. `error` (e.g. ENOENT when agent-status isn't installed) is
+  // returned on the result object, not thrown — so we ignore it for
+  // best-effort behavior.
+  spawnSync(BIN, args, {
+    input: JSON.stringify({ session_id: sessionId }),
     stdio: ["pipe", "ignore", "ignore"],
+    timeout: 1000,
   });
-  child.on("error", () => {
-    // best-effort: agent-status may not be installed; never crash opencode
-  });
-  child.stdin?.end(JSON.stringify({ session_id: sessionId }));
 }
