@@ -1,4 +1,5 @@
 pub mod claude_code;
+pub mod opencode;
 pub mod pi_coding_agent;
 
 /// An agent implementation: knows how to extract a session ID from the JSON payload that
@@ -17,6 +18,7 @@ pub trait Agent {
 pub fn by_name(name: &str) -> Option<Box<dyn Agent>> {
     match name {
         "claude-code" => Some(Box::new(claude_code::ClaudeCodeAgent)),
+        "opencode" => Some(Box::new(opencode::OpencodeAgent)),
         "pi-coding-agent" => Some(Box::new(pi_coding_agent::PiCodingAgent)),
         _ => None,
     }
@@ -46,5 +48,11 @@ mod tests {
     fn by_name_resolves_pi_coding_agent() {
         let agent = by_name("pi-coding-agent").expect("pi-coding-agent is a registered agent");
         assert_eq!(agent.name(), "pi-coding-agent");
+    }
+
+    #[test]
+    fn by_name_resolves_opencode() {
+        let agent = by_name("opencode").expect("opencode is a registered agent");
+        assert_eq!(agent.name(), "opencode");
     }
 }
