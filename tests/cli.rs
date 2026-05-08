@@ -3,7 +3,7 @@ use std::process::{Command, Stdio};
 use tempfile::TempDir;
 
 fn bin() -> &'static str {
-    env!("CARGO_BIN_EXE_claude-status")
+    env!("CARGO_BIN_EXE_agent-status")
 }
 
 fn run(state_dir: &std::path::Path, args: &[&str], stdin: Option<&str>) -> (String, String, i32) {

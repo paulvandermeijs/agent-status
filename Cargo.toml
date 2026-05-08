@@ -1,11 +1,11 @@
 [package]
-name = "claude-status"
-version = "0.1.0"
+name = "agent-status"
+version = "0.2.0"
 edition = "2021"
-description = "Tmux-integrated indicator showing which Claude Code sessions are waiting on user input."
+description = "Tmux-integrated indicator showing which AI coding agent sessions are waiting on user input."
 
 [[bin]]
-name = "claude-status"
+name = "agent-status"
 path = "src/main.rs"
 
 [dependencies]

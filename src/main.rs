@@ -11,11 +11,13 @@ use clap::{Parser, Subcommand};
 use commands::{build_entry, format_list, format_status};
 use state::StateStore;
 
-/// Tmux-integrated indicator showing which Claude Code sessions are waiting on user input.
+/// Tmux-integrated indicator showing which AI coding agent sessions are waiting on user input.
 ///
-/// Claude Code hooks call `set` (`Notification`, `Stop`) and `clear` (`UserPromptSubmit`,
-/// `SessionStart`, `SessionEnd`) with the hook event payload on stdin. tmux `status-right`
-/// calls `status` periodically; the popup picker calls `list`.
+/// Each agent's hooks invoke `set`/`clear` with `--agent <name>`; `status` and `list` are
+/// agent-neutral and aggregate state from every agent. Currently registered: `claude-code`.
+/// Claude Code's hooks: `set` on `Notification` / `Stop`; `clear` on `UserPromptSubmit` /
+/// `SessionStart` / `SessionEnd`. tmux `status-right` calls `status` periodically; the
+/// popup picker calls `list`.
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Cli {
@@ -66,7 +68,7 @@ fn main() -> ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
-            eprintln!("claude-status: {e}");
+            eprintln!("agent-status: {e}");
             ExitCode::from(1)
         }
     }
