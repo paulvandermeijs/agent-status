@@ -52,6 +52,8 @@ fn main() -> ExitCode {
     let store = StateStore::from_env();
     let agent: &dyn Agent = &ClaudeCodeAgent;
     debug_assert_eq!(agent.name(), "claude-code");
+    // Placeholder until Task 5 wires --agent routing; keeps `by_name` reachable for clippy.
+    let _ = agents::by_name("claude-code");
 
     let result = match cli.command {
         Cmd::Set { event } => run_set(&store, agent, &event),

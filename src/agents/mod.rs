@@ -11,3 +11,32 @@ pub trait Agent {
     /// invalid JSON, missing field, non-string value, or empty string.
     fn extract_session_id(&self, stdin_json: &str) -> Option<String>;
 }
+
+/// Resolve an agent by its `--agent` flag value.
+pub fn by_name(name: &str) -> Option<Box<dyn Agent>> {
+    match name {
+        "claude-code" => Some(Box::new(claude_code::ClaudeCodeAgent)),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn by_name_resolves_claude_code() {
+        let agent = by_name("claude-code").expect("claude-code is a registered agent");
+        assert_eq!(agent.name(), "claude-code");
+    }
+
+    #[test]
+    fn by_name_returns_none_for_unknown() {
+        assert!(by_name("frobnicator").is_none());
+    }
+
+    #[test]
+    fn by_name_is_case_sensitive() {
+        assert!(by_name("Claude-Code").is_none());
+    }
+}
