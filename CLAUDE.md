@@ -73,4 +73,4 @@ cargo build --release && install -m 0755 target/release/agent-status ~/.claude/b
 
 ## Plans / history
 
-Implementation plans live under `docs/superpowers/plans/`. The original bash precursor is `claude-tmux-attention-plan.md`. Useful for design context, but they're frozen in time — not authoritative for current code state.
+Implementation plans live under `docs/superpowers/plans/`. Useful for design context, but they're frozen in time — not authoritative for current code state.
