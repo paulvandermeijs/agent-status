@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build / test / lint
 
 ```sh
-cargo test                                                            # 25 tests (22 unit + 3 integration)
+cargo test                                                            # 31 tests (28 unit + 3 integration)
 cargo clippy --all-targets --all-features --locked -- -D warnings     # required gate
 cargo build --release                                                 # ~500 KB stripped binary
 ```

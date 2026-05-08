@@ -114,7 +114,7 @@ The `agent` field is `"claude-code"` or `"pi-coding-agent"`; new agents use thei
 ## Development
 
 ```sh
-cargo test                                                   # 25 tests (22 unit + 3 integration)
+cargo test                                                   # 31 tests (28 unit + 3 integration)
 cargo clippy --all-targets --all-features --locked -- -D warnings
 cargo build --release                                        # ~500 KB stripped binary
 ```
