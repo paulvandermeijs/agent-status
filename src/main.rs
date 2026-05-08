@@ -94,7 +94,7 @@ fn run_set(store: &StateStore, agent: &dyn Agent, event: &str) -> io::Result<()>
         .map(|d| d.as_secs())
         .unwrap_or(0);
 
-    let entry = build_entry(event, &cwd, &pane, ts);
+    let entry = build_entry("claude-code", event, &cwd, &pane, ts);
     store.write(&session_id, &entry)?;
     refresh_tmux();
     Ok(())

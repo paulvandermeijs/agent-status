@@ -16,12 +16,18 @@ pub fn extract_session_id(stdin_json: &str) -> Option<String> {
 ///
 /// `project` is derived as the basename of `cwd`. When `cwd` has no basename (e.g. `/`
 /// or empty string), `project` falls back to `cwd` itself.
-pub fn build_entry(event: &str, cwd: &str, tmux_pane: &str, ts: u64) -> AttentionEntry {
+pub fn build_entry(
+    agent: &str,
+    event: &str,
+    cwd: &str,
+    tmux_pane: &str,
+    ts: u64,
+) -> AttentionEntry {
     let project = Path::new(cwd)
         .file_name()
         .map_or_else(|| cwd.to_string(), |s| s.to_string_lossy().into_owned());
     AttentionEntry {
-        agent: "claude-code".into(),
+        agent: agent.to_string(),
         project,
         cwd: cwd.to_string(),
         event: event.to_string(),
@@ -98,7 +104,8 @@ mod tests {
 
     #[test]
     fn build_entry_uses_basename_of_cwd_as_project() {
-        let e = build_entry("notify", "/Users/me/work/claude-status", "%5", 42);
+        let e = build_entry("claude-code", "notify", "/Users/me/work/claude-status", "%5", 42);
+        assert_eq!(e.agent, "claude-code");
         assert_eq!(e.project, "claude-status");
         assert_eq!(e.cwd, "/Users/me/work/claude-status");
         assert_eq!(e.event, "notify");
@@ -108,8 +115,9 @@ mod tests {
 
     #[test]
     fn build_entry_falls_back_to_cwd_when_no_basename() {
-        let e = build_entry("notify", "/", "", 0);
+        let e = build_entry("claude-code", "notify", "/", "", 0);
         assert_eq!(e.project, "/");
+        assert_eq!(e.agent, "claude-code");
     }
 
     #[test]
