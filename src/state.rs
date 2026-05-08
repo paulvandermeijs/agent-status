@@ -3,7 +3,7 @@ use std::fs;
 use std::io;
 use std::path::PathBuf;
 
-/// One entry stored per active Claude Code session that is waiting on user attention.
+/// One entry stored per active agent session that is waiting on user attention.
 ///
 /// Serialized as compact JSON to one file per session (keyed by `session_id`) under
 /// `${XDG_RUNTIME_DIR:-/tmp}/agent-status/`. The field shape is wire-compatible with
