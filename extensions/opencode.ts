@@ -7,6 +7,8 @@ import { spawn } from "node:child_process";
  * Install: copy this file to `~/.config/opencode/plugins/opencode.ts`
  * (or `.opencode/plugins/opencode.ts` for per-project install).
  * Override the binary path with `AGENT_STATUS_BIN` if not at the default.
+ * On Windows, `process.env.HOME` is undefined — set `AGENT_STATUS_BIN`
+ * explicitly to an absolute path or the spawn will silently no-op.
  */
 export const AgentStatusPlugin = async () => {
   return {
