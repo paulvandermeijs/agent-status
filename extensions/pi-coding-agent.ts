@@ -37,7 +37,7 @@ function fire(ctx: any, action: Action, event?: SetEvent): void {
   child.on("error", () => {
     // best-effort: agent-status may not be installed; never crash pi
   });
-  child.stdin.end(JSON.stringify({ session_id: sessionId }));
+  child.stdin?.end(JSON.stringify({ session_id: sessionId }));
 }
 
 function sessionIdFromCtx(ctx: any): string | null {

@@ -51,5 +51,5 @@ function fire(
   child.on("error", () => {
     // best-effort: agent-status may not be installed; never crash opencode
   });
-  child.stdin.end(JSON.stringify({ session_id: sessionId }));
+  child.stdin?.end(JSON.stringify({ session_id: sessionId }));
 }
