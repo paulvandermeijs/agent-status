@@ -1,6 +1,6 @@
 # agent-status
 
-A small Rust CLI that shows in tmux's `status-right` which AI coding agent sessions are waiting on user input. Supports [Claude Code](https://claude.com/claude-code) and [pi](https://pi.dev); the architecture is set up to plug in additional agents (Codex CLI, Cursor CLI, OpenCode) without restructuring.
+A small Rust CLI that shows in tmux's `status-right` which AI coding agent sessions are waiting on user input. Supports [Claude Code](https://claude.com/claude-code), [pi](https://pi.dev), and [opencode](https://opencode.ai); the architecture is set up to plug in additional agents (Codex CLI, Cursor CLI) without restructuring.
 
 ```text
 $ agent-status status        # one session waiting
@@ -69,6 +69,28 @@ If your `agent-status` binary is not at `~/.claude/bin/agent-status`, set `AGENT
 
 **Known limitation:** pi has no built-in "agent paused waiting for permission" event analogous to Claude Code's `Notification` hook — pi extensions handle confirmations in-process via `ctx.ui.confirm()`. So pi-coding-agent surfaces the "done" state but not a separate "needs attention" state. In practice the dominant signal is "agent finished a turn, waiting on next prompt" anyway.
 
+### opencode (`~/.config/opencode/plugins/`)
+
+opencode plugins run in-process, so the integration ships as a single TypeScript file you drop into opencode's auto-discovery directory. Copy `extensions/opencode.ts` from this repo:
+
+```sh
+mkdir -p ~/.config/opencode/plugins
+cp extensions/opencode.ts ~/.config/opencode/plugins/
+```
+
+opencode auto-discovers files in `~/.config/opencode/plugins/` (global) and `.opencode/plugins/` (per-project) at startup; no further configuration is required. The plugin fires on these opencode events:
+
+| opencode event       | agent-status call                                 |
+|----------------------|---------------------------------------------------|
+| `session.idle`       | `set --agent opencode done` (agent finished a turn) |
+| `permission.updated` | `set --agent opencode notify` (agent paused for permission) |
+| `session.created`    | `clear --agent opencode`                          |
+| `session.deleted`    | `clear --agent opencode`                          |
+
+If your `agent-status` binary is not at `~/.claude/bin/agent-status`, set `AGENT_STATUS_BIN` in your shell environment before launching opencode.
+
+Unlike pi, opencode emits a `permission.updated` event when an agent pauses for a permission prompt, so opencode supports both `notify` and `done` indicator states (full feature parity with Claude Code). The one wart: opencode has no event for "user submitted a prompt", so after a turn ends the indicator stays on `done` while the user types the next prompt — by design, since the session *is* the one that needs your attention.
+
 ### tmux (`~/.tmux.conf`)
 
 Drop `#($HOME/.claude/bin/agent-status status)` into your existing `status-right` wherever you want the indicator to appear, and lower the refresh interval so updates feel snappy:
@@ -109,12 +131,12 @@ agent-status list                         # print TSV (pane, project, event) per
 {"agent":"claude-code","project":"agent-status","cwd":"/path/to/project","event":"notify","tmux_pane":"%17","ts":1778163565}
 ```
 
-The `agent` field is `"claude-code"` or `"pi-coding-agent"`; new agents use their own lowercase-hyphenated name.
+The `agent` field is `"claude-code"`, `"opencode"`, or `"pi-coding-agent"`; new agents use their own lowercase-hyphenated name.
 
 ## Development
 
 ```sh
-cargo test                                                   # 31 tests (28 unit + 3 integration)
+cargo test                                                   # 37 tests (34 unit + 3 integration)
 cargo clippy --all-targets --all-features --locked -- -D warnings
 cargo build --release                                        # ~500 KB stripped binary
 ```
