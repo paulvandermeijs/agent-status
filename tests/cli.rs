@@ -91,3 +91,61 @@ fn set_with_empty_session_id_is_noop() {
     let (stdout, _, _) = run(&state_dir, &["status"], None);
     assert_eq!(stdout, "");
 }
+
+#[test]
+fn list_outputs_session_id_pane_display_columns() {
+    let tmp = TempDir::new().unwrap();
+    let state_dir = tmp.path().join("agent-status");
+
+    let (_, _, code) = run(
+        &state_dir,
+        &["set", "notify"],
+        Some(r#"{"session_id":"sess-list","message":"Permission required"}"#),
+    );
+    assert_eq!(code, 0);
+
+    let (stdout, _, code) = run(&state_dir, &["list"], None);
+    assert_eq!(code, 0);
+    let line = stdout.lines().next().expect("at least one line");
+    let cols: Vec<&str> = line.split('\t').collect();
+    assert_eq!(cols.len(), 3, "expected 3 columns, got: {cols:?}");
+    assert_eq!(cols[0], "sess-list");
+    // pane is empty in tests because TMUX_PANE is removed by `run`.
+    assert_eq!(cols[1], "");
+    // Display column starts with the [!]/[*] marker, not the raw event word.
+    assert!(cols[2].starts_with("[!] "), "got: {:?}", cols[2]);
+    assert!(!cols[2].contains("notify"), "event word leaked: {:?}", cols[2]);
+    assert!(cols[2].contains("Permission required"));
+}
+
+#[test]
+fn preview_prints_multi_line_detail_for_known_session() {
+    let tmp = TempDir::new().unwrap();
+    let state_dir = tmp.path().join("agent-status");
+
+    let (_, _, code) = run(
+        &state_dir,
+        &["set", "notify"],
+        Some(r#"{"session_id":"sess-prev","message":"Hello from agent"}"#),
+    );
+    assert_eq!(code, 0);
+
+    let (stdout, _, code) = run(&state_dir, &["preview", "sess-prev"], None);
+    assert_eq!(code, 0);
+    assert!(stdout.contains("Project:"));
+    assert!(stdout.contains("Agent:"));
+    assert!(stdout.contains("claude-code"));
+    assert!(stdout.contains("Event:"));
+    assert!(stdout.contains("Message:"));
+    assert!(stdout.contains("Hello from agent"));
+}
+
+#[test]
+fn preview_unknown_session_id_exits_zero_with_empty_output() {
+    let tmp = TempDir::new().unwrap();
+    let state_dir = tmp.path().join("agent-status");
+
+    let (stdout, _, code) = run(&state_dir, &["preview", "no-such-session"], None);
+    assert_eq!(code, 0);
+    assert_eq!(stdout, "");
+}
