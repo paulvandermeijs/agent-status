@@ -95,6 +95,40 @@ pub fn format_list(entries: &[(String, AttentionEntry)]) -> String {
     out
 }
 
+/// Format the multi-line preview shown in fzf's `--preview` pane for one entry.
+///
+/// `now_ts` is the caller-supplied current Unix time in seconds, used to render `Age:`.
+/// The output is plain ASCII: a label-aligned key/value block, optionally followed by
+/// a `Message:` section when `entry.message` is `Some`. The `Message:` body preserves
+/// embedded newlines verbatim so multi-line agent responses read naturally.
+// The caller (`run_preview` in main.rs) is added in Task 10; allow until then.
+#[allow(dead_code)]
+pub fn format_preview(entry: &AttentionEntry, now_ts: u64) -> String {
+    use std::fmt::Write as _;
+    let age = now_ts.saturating_sub(entry.ts);
+    let pane = if entry.tmux_pane.is_empty() {
+        "-"
+    } else {
+        entry.tmux_pane.as_str()
+    };
+    let mut out = String::new();
+    writeln!(out, "Project:    {}", entry.project).unwrap();
+    writeln!(out, "Agent:      {}", entry.agent).unwrap();
+    writeln!(out, "Event:      {}", entry.event).unwrap();
+    writeln!(out, "CWD:        {}", entry.cwd).unwrap();
+    writeln!(out, "Pane:       {pane}").unwrap();
+    writeln!(out, "Age:        {}", format_age(age)).unwrap();
+    if let Some(msg) = entry.message.as_deref() {
+        out.push('\n');
+        out.push_str("Message:\n");
+        out.push_str(msg);
+        if !msg.ends_with('\n') {
+            out.push('\n');
+        }
+    }
+    out
+}
+
 fn truncate_chars(s: &str, cap: usize) -> String {
     s.chars().take(cap).collect()
 }
@@ -111,6 +145,26 @@ fn one_line(s: &str, cap: usize) -> String {
         }
     }
     truncate_chars(flat.trim(), cap)
+}
+
+// Used by `format_preview`; the dead_code lint fires until Task 10 wires up the caller.
+#[allow(dead_code)]
+fn format_age(secs: u64) -> String {
+    if secs < 60 {
+        format!("{secs}s")
+    } else if secs < 3_600 {
+        let m = secs / 60;
+        let s = secs % 60;
+        format!("{m}m {s:02}s")
+    } else if secs < 86_400 {
+        let h = secs / 3_600;
+        let m = (secs % 3_600) / 60;
+        format!("{h}h {m:02}m")
+    } else {
+        let d = secs / 86_400;
+        let h = (secs % 86_400) / 3_600;
+        format!("{d}d {h:02}h")
+    }
 }
 
 #[cfg(test)]
@@ -283,5 +337,62 @@ mod tests {
     #[test]
     fn format_list_empty_input_returns_empty_string() {
         assert_eq!(format_list(&[]), "");
+    }
+
+    #[test]
+    fn format_preview_includes_core_fields() {
+        let mut e = entry("alpha", "%17", "notify");
+        e.cwd = "/Users/x/work/alpha".into();
+        e.ts = 1_000;
+        let out = format_preview(&e, 1_000 + 134); // 134 seconds later
+        assert!(out.contains("Project:"));
+        assert!(out.contains("alpha"));
+        assert!(out.contains("Agent:"));
+        assert!(out.contains("claude-code"));
+        assert!(out.contains("Event:"));
+        assert!(out.contains("notify"));
+        assert!(out.contains("CWD:"));
+        assert!(out.contains("/Users/x/work/alpha"));
+        assert!(out.contains("Pane:"));
+        assert!(out.contains("%17"));
+        assert!(out.contains("Age:"));
+        assert!(out.contains("2m"), "expected 2m in: {out}");
+    }
+
+    #[test]
+    fn format_preview_omits_message_section_when_none() {
+        let e = entry("alpha", "%17", "done");
+        let out = format_preview(&e, e.ts);
+        assert!(!out.contains("Message:"), "got: {out}");
+    }
+
+    #[test]
+    fn format_preview_includes_message_section_when_some() {
+        let mut e = entry("alpha", "%17", "notify");
+        e.message = Some("Permission required\nfor /etc/passwd".into());
+        let out = format_preview(&e, e.ts);
+        assert!(out.contains("Message:"));
+        assert!(out.contains("Permission required"));
+        // Multi-line messages should be preserved (unlike the list snippet).
+        assert!(out.contains("for /etc/passwd"));
+    }
+
+    #[test]
+    fn format_preview_age_handles_seconds_minutes_hours_days() {
+        let e = entry("p", "%1", "done"); // ts = 1 from helper
+        assert!(format_preview(&e, e.ts).contains("Age:        0s"));
+        assert!(format_preview(&e, e.ts + 9).contains("Age:        9s"));
+        assert!(format_preview(&e, e.ts + 75).contains("Age:        1m 15s"));
+        assert!(format_preview(&e, e.ts + 3_600 + 120).contains("Age:        1h 02m"));
+        assert!(format_preview(&e, e.ts + 3 * 86_400 + 4 * 3_600).contains("Age:        3d 04h"));
+    }
+
+    #[test]
+    fn format_preview_age_clamps_when_now_before_ts() {
+        // Defense against clock skew: if now < ts, render as 0s rather than panicking.
+        let mut e = entry("p", "%1", "done");
+        e.ts = 100;
+        let out = format_preview(&e, 50);
+        assert!(out.contains("Age:        0s"), "got: {out}");
     }
 }
