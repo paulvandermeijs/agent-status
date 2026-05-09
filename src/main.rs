@@ -104,7 +104,7 @@ fn run_set(store: &StateStore, agent_name: &str, event: &str) -> io::Result<()> 
         .map(|d| d.as_secs())
         .unwrap_or(0);
 
-    let entry = build_entry(agent.name(), event, &cwd, &pane, ts);
+    let entry = build_entry(agent.name(), event, &cwd, &pane, ts, None);
     store.write(&session_id, &entry)?;
     refresh_tmux();
     Ok(())
