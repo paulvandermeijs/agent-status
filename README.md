@@ -106,10 +106,22 @@ set -g status-right "#($HOME/.claude/bin/agent-status status) <your existing sta
 Optional popup picker (prefix + `C-a`) for jumping to the waiting pane — requires `fzf`:
 
 ```tmux
-bind-key C-a display-popup -E -w 60% -h 40% \
-  "$HOME/.claude/bin/agent-status list | fzf --with-nth=2.. --delimiter='\\t' --prompt='Jump to> ' \
-    | cut -f1 | xargs -r -I{} tmux switch-client -t {}"
+bind-key C-a display-popup -E -w 80% -h 50% \
+  "$HOME/.claude/bin/agent-status list | fzf \
+     --delimiter='\\t' \
+     --with-nth=3 \
+     --preview='$HOME/.claude/bin/agent-status preview {1}' \
+     --preview-window=down:8 \
+     --prompt='Jump to> ' \
+   | cut -f2 | xargs -r -I{} tmux switch-client -t {}"
 ```
+
+`agent-status list` emits `session_id<TAB>pane<TAB>display` per waiting session.
+fzf shows only the third column (`--with-nth=3`), uses the first column as the
+preview key (`{1}` → `agent-status preview <session_id>`), and the post-selection
+`cut -f2` extracts the pane to feed `tmux switch-client`. The display column
+encodes the event as `[!]` (notify) or `[*]` (done) so fuzzy-find matches the
+project, agent, and message snippet rather than the bare event word.
 
 Reload with `tmux source-file ~/.tmux.conf`.
 
@@ -120,7 +132,8 @@ agent-status --help                       # top-level help
 agent-status set [EVENT] [--agent NAME]   # mark this session as waiting (reads JSON on stdin)
 agent-status clear [--agent NAME]         # clear this session's state (reads JSON on stdin)
 agent-status status                       # print the status-right line, empty if nothing waiting
-agent-status list                         # print TSV (pane, project, event) per waiting session
+agent-status list                         # print TSV (session_id, pane, display) per waiting session
+agent-status preview <SESSION_ID>         # multi-line detail for one session (used by fzf --preview)
 ```
 
 `set` and `clear` expect a JSON object on stdin with at least `{"session_id": "..."}`. Empty or missing `session_id` is a silent no-op.
@@ -130,8 +143,12 @@ agent-status list                         # print TSV (pane, project, event) per
 `${XDG_RUNTIME_DIR:-/tmp}/agent-status/<session_id>` — one file per active session. Inspectable with `ls`/`cat`. Format:
 
 ```json
-{"agent":"claude-code","project":"agent-status","cwd":"/path/to/project","event":"notify","tmux_pane":"%17","ts":1778163565}
+{"agent":"claude-code","project":"agent-status","cwd":"/path/to/project","event":"notify","tmux_pane":"%17","ts":1778163565,"message":"Permission required"}
 ```
+
+The `message` field is optional and only present when the agent's hook payload
+supplies one (e.g. Claude Code's `Notification` event). Older state files written
+before this field existed still load — `message` defaults to absent.
 
 The `agent` field is `"claude-code"`, `"opencode"`, or `"pi-coding-agent"`; new agents use their own lowercase-hyphenated name.
 
