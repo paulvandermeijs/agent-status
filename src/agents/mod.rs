@@ -17,7 +17,6 @@ pub trait Agent {
     /// payload carries one. Returns `None` when the field is absent, empty, or
     /// non-string. Default returns `None`; override in agents whose payload includes
     /// such text.
-    #[allow(dead_code)]
     fn extract_message(&self, _stdin_json: &str) -> Option<String> {
         None
     }
