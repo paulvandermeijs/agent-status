@@ -12,6 +12,15 @@ pub trait Agent {
     /// Extract the session ID from the agent's hook event JSON. Returns `None` for
     /// invalid JSON, missing field, non-string value, or empty string.
     fn extract_session_id(&self, stdin_json: &str) -> Option<String>;
+
+    /// Extract the agent's last-response text from the hook event JSON, when the
+    /// payload carries one. Returns `None` when the field is absent, empty, or
+    /// non-string. Default returns `None`; override in agents whose payload includes
+    /// such text.
+    #[allow(dead_code)]
+    fn extract_message(&self, _stdin_json: &str) -> Option<String> {
+        None
+    }
 }
 
 /// Resolve an agent by its `--agent` flag value.
@@ -54,5 +63,16 @@ mod tests {
     fn by_name_resolves_opencode() {
         let agent = by_name("opencode").expect("opencode is a registered agent");
         assert_eq!(agent.name(), "opencode");
+    }
+
+    #[test]
+    fn extract_message_default_returns_none() {
+        // A hand-rolled agent that doesn't override extract_message should get None.
+        struct NoopAgent;
+        impl Agent for NoopAgent {
+            fn name(&self) -> &'static str { "noop" }
+            fn extract_session_id(&self, _: &str) -> Option<String> { None }
+        }
+        assert!(NoopAgent.extract_message(r#"{"message":"hi"}"#).is_none());
     }
 }
