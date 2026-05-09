@@ -155,7 +155,7 @@ The `agent` field is `"claude-code"`, `"opencode"`, or `"pi-coding-agent"`; new 
 ## Development
 
 ```sh
-cargo test                                                   # 37 tests (34 unit + 3 integration)
+cargo test                                                   # 72 tests (66 unit + 6 integration)
 cargo clippy --all-targets --all-features --locked -- -D warnings
 cargo build --release                                        # ~500 KB stripped binary
 ```
