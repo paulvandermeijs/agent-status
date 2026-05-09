@@ -101,8 +101,6 @@ pub fn format_list(entries: &[(String, AttentionEntry)]) -> String {
 /// The output is plain ASCII: a label-aligned key/value block, optionally followed by
 /// a `Message:` section when `entry.message` is `Some`. The `Message:` body preserves
 /// embedded newlines verbatim so multi-line agent responses read naturally.
-// The caller (`run_preview` in main.rs) is added in Task 10; allow until then.
-#[allow(dead_code)]
 pub fn format_preview(entry: &AttentionEntry, now_ts: u64) -> String {
     use std::fmt::Write as _;
     let age = now_ts.saturating_sub(entry.ts);
@@ -147,8 +145,6 @@ fn one_line(s: &str, cap: usize) -> String {
     truncate_chars(flat.trim(), cap)
 }
 
-// Used by `format_preview`; the dead_code lint fires until Task 10 wires up the caller.
-#[allow(dead_code)]
 fn format_age(secs: u64) -> String {
     if secs < 60 {
         format!("{secs}s")

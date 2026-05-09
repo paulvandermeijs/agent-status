@@ -8,7 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use clap::{Parser, Subcommand};
 
-use commands::{build_entry, format_list, format_status};
+use commands::{build_entry, format_list, format_preview, format_status};
 use state::StateStore;
 
 /// Tmux-integrated indicator showing which AI coding agent sessions are waiting on user input.
@@ -50,8 +50,16 @@ enum Cmd {
     },
     /// Print the tmux status-right line. Empty output if no sessions are waiting.
     Status,
-    /// Print TSV (pane, project, event) of all waiting sessions, one per line.
+    /// Print TSV (`session_id\tpane\tdisplay`) of all waiting sessions, one per line.
     List,
+    /// Print a multi-line detail block for one session — used by fzf's `--preview`.
+    ///
+    /// If no entry matches `session_id`, exits 0 with empty output (the picker treats
+    /// the preview as transient and recovers on the next selection).
+    Preview {
+        /// Session identifier as emitted in column 1 of `list`.
+        session_id: String,
+    },
 }
 
 fn main() -> ExitCode {
@@ -63,6 +71,9 @@ fn main() -> ExitCode {
         Cmd::Clear { agent } => run_clear(&store, &agent),
         Cmd::Status => run_status(&store, &mut io::stdout().lock()),
         Cmd::List => run_list(&store, &mut io::stdout().lock()),
+        Cmd::Preview { session_id } => {
+            run_preview(&store, &session_id, &mut io::stdout().lock())
+        }
     };
 
     match result {
@@ -140,6 +151,19 @@ fn run_status(store: &StateStore, out: &mut impl Write) -> io::Result<()> {
 fn run_list(store: &StateStore, out: &mut impl Write) -> io::Result<()> {
     let entries = store.list()?;
     write!(out, "{}", format_list(&entries))?;
+    Ok(())
+}
+
+fn run_preview(store: &StateStore, session_id: &str, out: &mut impl Write) -> io::Result<()> {
+    let entries = store.list()?;
+    let Some((_, entry)) = entries.into_iter().find(|(sid, _)| sid == session_id) else {
+        return Ok(());
+    };
+    let now_ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    write!(out, "{}", format_preview(&entry, now_ts))?;
     Ok(())
 }
 
