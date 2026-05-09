@@ -21,6 +21,16 @@ impl Agent for PiCodingAgent {
             Some(id.to_string())
         }
     }
+
+    fn extract_message(&self, stdin_json: &str) -> Option<String> {
+        let v: serde_json::Value = serde_json::from_str(stdin_json).ok()?;
+        let m = v.get("message")?.as_str()?;
+        if m.is_empty() {
+            None
+        } else {
+            Some(m.to_string())
+        }
+    }
 }
 
 #[cfg(test)]
@@ -60,5 +70,34 @@ mod tests {
     #[test]
     fn extract_session_id_returns_none_for_invalid_json() {
         assert_eq!(PiCodingAgent.extract_session_id("not json"), None);
+    }
+
+    #[test]
+    fn extract_message_returns_string_when_present() {
+        let json = r#"{"session_id":"x","message":"Done with refactor"}"#;
+        assert_eq!(
+            PiCodingAgent.extract_message(json).as_deref(),
+            Some("Done with refactor")
+        );
+    }
+
+    #[test]
+    fn extract_message_returns_none_when_field_missing() {
+        assert!(PiCodingAgent.extract_message(r#"{"session_id":"x"}"#).is_none());
+    }
+
+    #[test]
+    fn extract_message_returns_none_when_empty() {
+        assert!(PiCodingAgent.extract_message(r#"{"session_id":"x","message":""}"#).is_none());
+    }
+
+    #[test]
+    fn extract_message_returns_none_for_non_string_value() {
+        assert!(PiCodingAgent.extract_message(r#"{"session_id":"x","message":null}"#).is_none());
+    }
+
+    #[test]
+    fn extract_message_returns_none_for_invalid_json() {
+        assert!(PiCodingAgent.extract_message("not json").is_none());
     }
 }
