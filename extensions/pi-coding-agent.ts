@@ -12,10 +12,16 @@ import { basename } from "node:path";
  * explicitly to an absolute path or the spawn will silently no-op.
  */
 export default function (pi: ExtensionAPI) {
-  pi.on("session_start", async (_event, ctx) => fire(ctx, "clear"));
-  pi.on("session_shutdown", async (_event, ctx) => fire(ctx, "clear"));
-  pi.on("before_agent_start", async (_event, ctx) => fire(ctx, "clear"));
-  pi.on("agent_end", async (_event, ctx) => fire(ctx, "set", "done"));
+  pi.on("session_start", async (_event, ctx) => fire(ctx, undefined, "clear"));
+  pi.on("session_shutdown", async (_event, ctx) =>
+    fire(ctx, undefined, "clear"),
+  );
+  pi.on("before_agent_start", async (_event, ctx) =>
+    fire(ctx, undefined, "clear"),
+  );
+  pi.on("agent_end", async (event, ctx) =>
+    fire(ctx, lastAgentMessage(event, ctx), "set", "done"),
+  );
 }
 
 const BIN =
@@ -24,7 +30,12 @@ const BIN =
 type Action = "set" | "clear";
 type SetEvent = "notify" | "done";
 
-function fire(ctx: any, action: Action, event?: SetEvent): void {
+function fire(
+  ctx: any,
+  message: string | undefined,
+  action: Action,
+  event?: SetEvent,
+): void {
   const sessionId = sessionIdFromCtx(ctx);
   if (!sessionId) return;
 
@@ -39,13 +50,37 @@ function fire(ctx: any, action: Action, event?: SetEvent): void {
   child.on("error", () => {
     // best-effort: agent-status may not be installed; never crash pi
   });
-  child.stdin?.end(JSON.stringify({ session_id: sessionId }));
+  const payload: Record<string, string> = { session_id: sessionId };
+  if (message) payload.message = message;
+  child.stdin?.end(JSON.stringify(payload));
 }
 
 function sessionIdFromCtx(ctx: any): string | null {
-  const file: string | null | undefined = ctx?.sessionManager?.getSessionFile?.();
+  const file: string | null | undefined =
+    ctx?.sessionManager?.getSessionFile?.();
   if (!file) return null;
   // pi session filenames are "<timestamp>_<uuid>.jsonl" — pull the UUID out.
   const match = basename(file, ".jsonl").match(/_([0-9a-f-]{36})$/i);
   return match ? match[1] : null;
+}
+
+/**
+ * Best-effort extraction of the last assistant text from pi's `agent_end`
+ * payload. The exact field name depends on pi's runtime shape; we probe a
+ * handful of plausible spots and silently fall through when nothing is
+ * present, in which case the JSON sent to `agent-status set` simply omits
+ * the `message` field and the Rust side stores `message: None`.
+ */
+function lastAgentMessage(event: any, ctx: any): string | undefined {
+  const candidates: unknown[] = [
+    event?.response?.text,
+    event?.message?.text,
+    event?.lastMessage?.text,
+    ctx?.lastAgentResponse?.text,
+    ctx?.lastMessage?.text,
+  ];
+  for (const c of candidates) {
+    if (typeof c === "string" && c.trim().length > 0) return c;
+  }
+  return undefined;
 }
