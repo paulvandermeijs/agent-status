@@ -22,6 +22,10 @@ pub struct AttentionEntry {
     pub tmux_pane: String,
     /// Unix timestamp (seconds) when the entry was written.
     pub ts: u64,
+    /// Optional last-message text from the agent (e.g. Claude Code Notification's `message`
+    /// field). Absent in the JSON when `None`; absent on entries written by older binaries.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
 }
 
 /// Reads, writes and lists [`AttentionEntry`] files under a single state directory.
@@ -144,6 +148,7 @@ mod tests {
             event: "notify".into(),
             tmux_pane: "%42".into(),
             ts: 1_700_000_000,
+            message: None,
         };
         let json = serde_json::to_string(&entry).unwrap();
         let parsed: AttentionEntry = serde_json::from_str(&json).unwrap();
@@ -159,6 +164,7 @@ mod tests {
             event: "done".into(),
             tmux_pane: "%1".into(),
             ts: 1,
+            message: None,
         };
         let v: serde_json::Value = serde_json::to_value(&entry).unwrap();
         // Original fields from the bash precursor — must not be renamed/removed.
@@ -179,6 +185,7 @@ mod tests {
             event: "notify".into(),
             tmux_pane: "%1".into(),
             ts: 1,
+            message: None,
         }
     }
 
@@ -227,6 +234,46 @@ mod tests {
     fn from_env_path_ends_with_agent_status() {
         let store = StateStore::from_env();
         assert!(store.dir().ends_with("agent-status"));
+    }
+
+    #[test]
+    fn entry_message_field_roundtrips_when_set() {
+        let entry = AttentionEntry {
+            agent: "claude-code".into(),
+            project: "p".into(),
+            cwd: "/c".into(),
+            event: "notify".into(),
+            tmux_pane: "%1".into(),
+            ts: 1,
+            message: Some("Permission required".into()),
+        };
+        let json = serde_json::to_string(&entry).unwrap();
+        assert!(json.contains(r#""message":"Permission required""#));
+        let parsed: AttentionEntry = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.message.as_deref(), Some("Permission required"));
+    }
+
+    #[test]
+    fn entry_message_field_omitted_from_json_when_none() {
+        let entry = AttentionEntry {
+            agent: "claude-code".into(),
+            project: "p".into(),
+            cwd: "/c".into(),
+            event: "done".into(),
+            tmux_pane: "%1".into(),
+            ts: 1,
+            message: None,
+        };
+        let json = serde_json::to_string(&entry).unwrap();
+        assert!(!json.contains("message"), "got: {json}");
+    }
+
+    #[test]
+    fn entry_deserializes_when_message_field_absent() {
+        // Old state files written before this field was added must still load.
+        let json = r#"{"agent":"claude-code","project":"p","cwd":"/c","event":"done","tmux_pane":"%1","ts":1}"#;
+        let parsed: AttentionEntry = serde_json::from_str(json).unwrap();
+        assert!(parsed.message.is_none());
     }
 
     #[test]

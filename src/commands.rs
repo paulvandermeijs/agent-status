@@ -22,6 +22,7 @@ pub fn build_entry(
         event: event.to_string(),
         tmux_pane: tmux_pane.to_string(),
         ts,
+        message: None,
     }
 }
 
@@ -67,6 +68,7 @@ mod tests {
             event: event.into(),
             tmux_pane: pane.into(),
             ts: 1,
+            message: None,
         }
     }
 
