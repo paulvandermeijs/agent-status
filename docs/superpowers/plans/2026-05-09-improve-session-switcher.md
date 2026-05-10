@@ -1541,7 +1541,7 @@ bind-key C-a display-popup -E -w 80% -h 50% \
      --delimiter='\\t' \
      --with-nth=3 \
      --preview='$HOME/.claude/bin/agent-status preview {1}' \
-     --preview-window=down:8 \
+     --preview-window=right:50%:wrap \
      --prompt='Jump to> ' \
    | cut -f2 | xargs -r -I{} tmux switch-client -t {}"
 ```
@@ -1653,7 +1653,7 @@ Expected: a multi-line block with `Project:`, `Agent:`, `Event:`, `CWD:`, `Pane:
 
 In a tmux session, source the updated `~/.tmux.conf` and press `<prefix> C-a` (or whichever binding you set). Verify:
   - The list shows aligned columns (no raw tab whitespace).
-  - The preview pane on the right (or below, per `--preview-window=down:8`) updates as you move between rows.
+  - The preview pane on the right (per `--preview-window=right:50%:wrap`) updates as you move between rows.
   - Typing `alpha` matches the alpha row; typing `notify` does NOT match (the bare event word is gone from the display).
   - Selecting a row runs `tmux switch-client -t %<pane>` and you land on that pane.
 

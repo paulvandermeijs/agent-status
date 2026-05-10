@@ -111,7 +111,7 @@ bind-key C-a display-popup -E -w 80% -h 50% \
      --delimiter='\\t' \
      --with-nth=3 \
      --preview='$HOME/.claude/bin/agent-status preview {1}' \
-     --preview-window=down:8 \
+     --preview-window=right:50%:wrap \
      --prompt='Jump to> ' \
    | cut -f2 | xargs -r -I{} tmux switch-client -t {}"
 ```
