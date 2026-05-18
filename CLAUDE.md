@@ -48,6 +48,8 @@ No changes to `state.rs`, `commands.rs`, or `main.rs` should be needed for a typ
 
 Some agents (e.g. pi at `pi.dev`) don't have a shell-hook mechanism — their lifecycle events fire in-process inside the agent's runtime. For those, the Rust `Agent` impl is unchanged (it still reads JSON from stdin), but the integration ships an additional bridge file that runs inside the agent and shells out to `agent-status`. See `extensions/pi-coding-agent.ts` and the pi section of `README.md`. The `Agent::extract_session_id` contract still applies — the bridge constructs the JSON payload, so we control the field name.
 
+A third pattern is a PATH-shadowing wrapper that auto-injects the hook configuration so the user doesn't have to touch the agent's settings file at all. The wrapper lives in `extensions/<agent>-wrapper.sh`, gates on some environment signal (`TMUX_PANE` for our use case), finds the real binary on `$PATH` (skipping its own directory by inode comparison), writes a temp settings file with `agent-status` hook commands and the appropriate flag (Claude Code's `--settings`, codex's `-c notify=...`, etc.), and runs the real binary as a child so it can clean up the temp file via `trap`. The Rust `Agent` impl is unchanged — the wrapper still pipes the agent's normal hook JSON to `agent-status set`/`clear`, so the `extract_session_id` contract still applies. See `extensions/claude-wrapper.sh` for the reference implementation.
+
 ## Wire compatibility
 
 `AttentionEntry`'s original five field names (`project`, `cwd`, `event`, `tmux_pane`, `ts`) match the bash precursor of this tool; mixed-version setups must not break. The test `entry_matches_bash_plan_field_names` in `state.rs` is the guard — don't rename fields without updating it deliberately.
