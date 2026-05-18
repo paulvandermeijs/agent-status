@@ -24,10 +24,11 @@ No daemon. The filesystem is the state store; each session writes only its own k
 ```sh
 cargo build --release
 mkdir -p ~/.claude/bin
-install -m 0755 target/release/agent-status ~/.claude/bin/agent-status
+install -m 0755 target/release/agent-status   ~/.claude/bin/agent-status
+install -m 0755 target/release/agent-switcher ~/.claude/bin/agent-switcher
 ```
 
-`~/.claude/bin` is one option; any directory works as long as the absolute path matches what you put in the hook commands and tmux config below. The binary is around 500 KB and has no runtime dependencies (tmux is invoked best-effort to refresh the status bar; if it isn't running, the failure is silenced).
+`~/.claude/bin` is one option; any directory works as long as the absolute path matches what you put in the hook commands and tmux config below. Both binaries are around 500 KB combined and have no runtime dependencies (tmux is invoked best-effort to refresh the status bar and switch panes; if it isn't running, the failure is silenced).
 
 ## Configure
 
@@ -141,25 +142,15 @@ set -g status-interval 5
 set -g status-right "#($HOME/.claude/bin/agent-status status) <your existing status-right here>"
 ```
 
-Optional popup picker (prefix + `C-a`) for jumping to the waiting pane — requires `fzf`:
+Optional popup picker (prefix + `C-a`) for jumping to the waiting pane — uses the bundled `agent-switcher` TUI:
 
 ```tmux
-bind-key C-a display-popup -E -w 80% -h 50% \
-  "$HOME/.claude/bin/agent-status list | fzf \
-     --delimiter='\\t' \
-     --with-nth=3 \
-     --preview='$HOME/.claude/bin/agent-status preview {1}' \
-     --preview-window=right:50%:wrap \
-     --prompt='Jump to> ' \
-   | cut -f2 | xargs -r -I{} tmux switch-client -t {}"
+bind-key C-a display-popup -E -w 80% -h 50% "$HOME/.claude/bin/agent-switcher"
 ```
 
-`agent-status list` emits `session_id<TAB>pane<TAB>display` per waiting session.
-fzf shows only the third column (`--with-nth=3`), uses the first column as the
-preview key (`{1}` → `agent-status preview <session_id>`), and the post-selection
-`cut -f2` extracts the pane to feed `tmux switch-client`. The display column
-encodes the event as `[!]` (notify) or `[*]` (done) so fuzzy-find matches the
-project, agent, and message snippet rather than the bare event word.
+`agent-switcher` opens a small ratatui TUI: filter input at the top, the list of sessions in the middle, a help strip at the bottom. Type to filter (case-insensitive, matches across project / agent / message / session id); <kbd>Ctrl-N</kbd> and <kbd>Ctrl-P</kbd> (or arrow keys) move the selection; <kbd>Enter</kbd> runs `tmux switch-client` to the selected session's pane and exits; <kbd>Esc</kbd> or <kbd>Ctrl-C</kbd> exits without switching.
+
+The list shows every recorded session — including those still working (animated spinner) — not just sessions waiting on your attention. That makes the popup useful as a general session jumper, while the status-bar indicator stays focused on "needs you now" sessions.
 
 Reload with `tmux source-file ~/.tmux.conf`.
 
@@ -171,7 +162,6 @@ agent-status set [EVENT] [--agent NAME]   # mark this session as waiting (reads 
 agent-status clear [--agent NAME]         # clear this session's state (reads JSON on stdin)
 agent-status status                       # print the status-right line, empty if nothing waiting
 agent-status list                         # print TSV (session_id, pane, display) per waiting session
-agent-status preview <SESSION_ID>         # multi-line detail for one session (used by fzf --preview)
 ```
 
 `set` and `clear` expect a JSON object on stdin with at least `{"session_id": "..."}`. Empty or missing `session_id` is a silent no-op.
@@ -205,5 +195,6 @@ cargo build --release                                        # ~500 KB stripped 
 - **The `Stop` hook fires on every turn end**, so any session that just finished a response shows up as "waiting" until you send the next prompt. Intentional — the whole point is to know which session needs you while you're heads-down elsewhere. Drop the `Stop` line from `settings.json` if it proves too eager.
 - **opencode has no "user submitted a prompt" event**, so once `session.idle` marks an opencode session `done`, the indicator stays on `done` while you type the next prompt and only refreshes its timestamp on the next idle. Same intent as the `Stop` caveat above — the session *is* the one waiting on you.
 - **Architecture-specific binary.** The compiled binary is platform-locked. On a new machine, rebuild from source.
+- **Only Claude Code records a `working` state** today. pi and opencode sessions appear in the switcher when they're waiting (`done` / `notify`) but not while they're mid-turn. The hook semantics for those agents can be extended in a follow-up.
 
 [hooks]: https://docs.claude.com/en/docs/claude-code/hooks
