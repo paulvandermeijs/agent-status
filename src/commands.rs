@@ -1,6 +1,37 @@
 use crate::state::AttentionEntry;
 use std::path::Path;
 
+/// Build the Claude Code `--settings` JSON wiring the agent-status hooks to `bin_path`.
+///
+/// Returns `Some(json)` for agents that support `--settings`-style injection
+/// (currently only `claude-code`); returns `None` for any other agent name. The
+/// JSON wires the same six hooks documented in the README's manual settings
+/// snippet — `Notification`/`Stop` → `set`, `UserPromptSubmit`/`PreToolUse`/
+/// `SessionStart`/`SessionEnd` → `clear`.
+///
+/// `bin_path` is embedded into the `command` strings via `serde_json::json!`
+/// so quotes/backslashes in the path are escaped safely without manual work.
+pub fn build_settings_json(bin_path: &str, agent_name: &str) -> Option<String> {
+    if agent_name != "claude-code" {
+        return None;
+    }
+    let set_notify = format!("{bin_path} set --agent claude-code notify");
+    let set_done = format!("{bin_path} set --agent claude-code done");
+    let clear = format!("{bin_path} clear --agent claude-code");
+
+    let value = serde_json::json!({
+        "hooks": {
+            "Notification":     [{"hooks": [{"type": "command", "command": set_notify}]}],
+            "Stop":             [{"hooks": [{"type": "command", "command": set_done}]}],
+            "UserPromptSubmit": [{"hooks": [{"type": "command", "command": clear}]}],
+            "PreToolUse":       [{"hooks": [{"type": "command", "command": clear}]}],
+            "SessionStart":     [{"hooks": [{"type": "command", "command": clear}]}],
+            "SessionEnd":       [{"hooks": [{"type": "command", "command": clear}]}],
+        }
+    });
+    Some(serde_json::to_string_pretty(&value).expect("serde_json::Value always serializes"))
+}
+
 /// Construct an [`AttentionEntry`] from raw inputs.
 ///
 /// `project` is derived as the basename of `cwd`. When `cwd` has no basename (e.g. `/`
@@ -409,5 +440,62 @@ mod tests {
         e.ts = 100;
         let out = format_preview(&e, 50);
         assert!(out.contains("Age:        0s"), "got: {out}");
+    }
+
+    #[test]
+    fn build_settings_json_returns_none_for_unknown_agent() {
+        assert!(build_settings_json("/x/agent-status", "pi-coding-agent").is_none());
+        assert!(build_settings_json("/x/agent-status", "opencode").is_none());
+        assert!(build_settings_json("/x/agent-status", "frobnicator").is_none());
+    }
+
+    #[test]
+    fn build_settings_json_returns_some_for_claude_code() {
+        let json = build_settings_json("/x/agent-status", "claude-code")
+            .expect("claude-code is supported");
+        // Parse-back roundtrip — output must be valid JSON.
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert!(parsed.get("hooks").is_some(), "missing top-level hooks key");
+    }
+
+    #[test]
+    fn build_settings_json_wires_all_six_hook_events() {
+        let json = build_settings_json("/x/agent-status", "claude-code").unwrap();
+        for event in [
+            "Notification",
+            "Stop",
+            "UserPromptSubmit",
+            "PreToolUse",
+            "SessionStart",
+            "SessionEnd",
+        ] {
+            assert!(json.contains(event), "missing hook event {event} in: {json}");
+        }
+    }
+
+    #[test]
+    fn build_settings_json_uses_set_and_clear_correctly() {
+        let json = build_settings_json("/path/to/agent-status", "claude-code").unwrap();
+        // Notification → notify, Stop → done.
+        assert!(json.contains("set --agent claude-code notify"));
+        assert!(json.contains("set --agent claude-code done"));
+        // The four clear events all share one command string.
+        assert!(json.contains("clear --agent claude-code"));
+        // Sanity: the binary path is embedded verbatim.
+        assert!(json.contains("/path/to/agent-status"));
+    }
+
+    #[test]
+    fn build_settings_json_escapes_unsafe_chars_in_bin_path() {
+        // A path with a quote and a backslash would corrupt JSON if interpolated raw.
+        // serde_json::json! handles the escaping for us; verify the output round-trips.
+        let json = build_settings_json(r#"/x/has"quote\and-backslash/agent-status"#, "claude-code")
+            .unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let command = parsed
+            .pointer("/hooks/Notification/0/hooks/0/command")
+            .and_then(serde_json::Value::as_str)
+            .expect("notification command string");
+        assert!(command.contains(r#"has"quote\and-backslash"#), "got: {command}");
     }
 }

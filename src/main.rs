@@ -8,7 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use clap::{Parser, Subcommand};
 
-use commands::{build_entry, format_list, format_preview, format_status};
+use commands::{build_entry, build_settings_json, format_list, format_preview, format_status};
 use state::StateStore;
 
 /// Tmux-integrated indicator showing which AI coding agent sessions are waiting on user input.
@@ -60,6 +60,19 @@ enum Cmd {
         /// Session identifier as emitted in column 1 of `list`.
         session_id: String,
     },
+    /// Generate the agent's hook-settings JSON and print its path.
+    ///
+    /// Intended for use as a shell alias: `alias claude='claude --settings
+    /// "$(agent-status agent-settings)"'`. Writes a fresh JSON file (using
+    /// the current `agent-status` binary's absolute path) to
+    /// `${XDG_RUNTIME_DIR:-/tmp}/agent-status/settings/<agent>.json` and
+    /// prints that path on stdout. Only `claude-code` supports `--settings`-
+    /// style injection today; other agents return an error.
+    AgentSettings {
+        /// Identifier of the agent the settings file should target.
+        #[arg(long, default_value = "claude-code")]
+        agent: String,
+    },
 }
 
 fn main() -> ExitCode {
@@ -74,6 +87,7 @@ fn main() -> ExitCode {
         Cmd::Preview { session_id } => {
             run_preview(&store, &session_id, &mut io::stdout().lock())
         }
+        Cmd::AgentSettings { agent } => run_agent_settings(&agent, &mut io::stdout().lock()),
     };
 
     match result {
@@ -176,6 +190,38 @@ fn run_preview(store: &StateStore, session_id: &str, out: &mut impl Write) -> io
         .map_or(0, |d| d.as_secs());
     write!(out, "{}", format_preview(&entry, now_ts))?;
     Ok(())
+}
+
+fn run_agent_settings(agent_name: &str, out: &mut impl Write) -> io::Result<()> {
+    let Some(agent) = agents::by_name(agent_name) else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("unknown agent: {agent_name}"),
+        ));
+    };
+    let bin_path = std::env::current_exe()?;
+    let bin_str = bin_path.to_string_lossy();
+    let Some(json) = build_settings_json(&bin_str, agent.name()) else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("agent has no --settings integration: {agent_name}"),
+        ));
+    };
+    let settings_path = settings_path_for(agent.name());
+    if let Some(parent) = settings_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(&settings_path, json)?;
+    writeln!(out, "{}", settings_path.display())?;
+    Ok(())
+}
+
+fn settings_path_for(agent_name: &str) -> std::path::PathBuf {
+    let base = std::env::var_os("XDG_RUNTIME_DIR")
+        .map_or_else(|| std::path::PathBuf::from("/tmp"), std::path::PathBuf::from);
+    base.join("agent-status")
+        .join("settings")
+        .join(format!("{agent_name}.json"))
 }
 
 fn refresh_tmux() {

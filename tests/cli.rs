@@ -239,3 +239,56 @@ fn status_keeps_state_file_with_live_pid() {
         "live state file must not be pruned",
     );
 }
+
+#[test]
+fn agent_settings_writes_file_and_prints_path() {
+    let tmp = TempDir::new().unwrap();
+    let state_dir = tmp.path().join("agent-status");
+
+    let (stdout, stderr, code) = run(&state_dir, &["agent-settings"], None);
+    assert_eq!(code, 0, "stderr: {stderr}");
+
+    // The printed path should point at the settings file inside XDG_RUNTIME_DIR.
+    let printed_path = stdout.trim_end_matches('\n');
+    let expected = state_dir.join("settings").join("claude-code.json");
+    assert_eq!(printed_path, expected.to_string_lossy());
+
+    // File must exist with parseable JSON containing the hooks block.
+    let contents = std::fs::read_to_string(&expected).expect("settings file written");
+    let parsed: serde_json::Value = serde_json::from_str(&contents).expect("valid json");
+    let hooks = parsed.get("hooks").expect("hooks key present");
+    for event in [
+        "Notification",
+        "Stop",
+        "UserPromptSubmit",
+        "PreToolUse",
+        "SessionStart",
+        "SessionEnd",
+    ] {
+        assert!(hooks.get(event).is_some(), "missing hook event {event}");
+    }
+}
+
+#[test]
+fn agent_settings_unknown_agent_exits_nonzero() {
+    let tmp = TempDir::new().unwrap();
+    let state_dir = tmp.path().join("agent-status");
+    let (_, stderr, code) = run(&state_dir, &["agent-settings", "--agent", "frobnicator"], None);
+    assert_ne!(code, 0, "should exit non-zero for unknown agent");
+    assert!(stderr.contains("unknown agent"), "stderr: {stderr:?}");
+}
+
+#[test]
+fn agent_settings_unsupported_agent_exits_nonzero() {
+    // Agents without `--settings` integration (e.g. pi-coding-agent, opencode)
+    // should return an error rather than silently producing nothing.
+    let tmp = TempDir::new().unwrap();
+    let state_dir = tmp.path().join("agent-status");
+    let (_, stderr, code) = run(
+        &state_dir,
+        &["agent-settings", "--agent", "pi-coding-agent"],
+        None,
+    );
+    assert_ne!(code, 0);
+    assert!(stderr.contains("--settings"), "stderr: {stderr:?}");
+}
