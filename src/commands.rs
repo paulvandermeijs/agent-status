@@ -25,6 +25,7 @@ pub fn build_entry(
         tmux_pane: tmux_pane.to_string(),
         ts,
         message: message.map(str::to_string),
+        pid: None,
     }
 }
 
@@ -176,6 +177,7 @@ mod tests {
             tmux_pane: pane.into(),
             ts: 1,
             message: None,
+            pid: None,
         }
     }
 

@@ -10,22 +10,21 @@ use std::path::PathBuf;
 /// the bash version of this tool.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct AttentionEntry {
-    /// Stable identifier of the agent that wrote this entry (e.g. `"claude-code"`).
     pub agent: String,
-    /// Basename of the project directory (typically the cwd's last component).
     pub project: String,
-    /// Absolute path of the project directory at the time the hook fired.
     pub cwd: String,
-    /// Hook event label, for example `notify` or `done`.
     pub event: String,
-    /// Tmux pane id (such as `%17`), or empty if the hook fired outside tmux.
     pub tmux_pane: String,
-    /// Unix timestamp (seconds) when the entry was written.
     pub ts: u64,
-    /// Optional last-message text from the agent (e.g. Claude Code Notification's `message`
-    /// field). Absent in the JSON when `None`; absent on entries written by older binaries.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
+    /// PID of the agent process at the time the hook fired (typically `getppid()`
+    /// from inside the hook script — the claude/opencode/pi binary). Used by
+    /// [`StateStore::prune_dead`] to clean up state files whose owning process
+    /// has exited without firing its session-end hook. Absent in entries written
+    /// by older binaries; entries without a pid are never auto-pruned.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pid: Option<u32>,
 }
 
 /// Reads, writes and lists [`AttentionEntry`] files under a single state directory.
@@ -149,6 +148,7 @@ mod tests {
             tmux_pane: "%42".into(),
             ts: 1_700_000_000,
             message: None,
+            pid: None,
         };
         let json = serde_json::to_string(&entry).unwrap();
         let parsed: AttentionEntry = serde_json::from_str(&json).unwrap();
@@ -165,6 +165,7 @@ mod tests {
             tmux_pane: "%1".into(),
             ts: 1,
             message: None,
+            pid: None,
         };
         let v: serde_json::Value = serde_json::to_value(&entry).unwrap();
         // Original fields from the bash precursor — must not be renamed/removed.
@@ -186,6 +187,7 @@ mod tests {
             tmux_pane: "%1".into(),
             ts: 1,
             message: None,
+            pid: None,
         }
     }
 
@@ -246,6 +248,7 @@ mod tests {
             tmux_pane: "%1".into(),
             ts: 1,
             message: Some("Permission required".into()),
+            pid: None,
         };
         let json = serde_json::to_string(&entry).unwrap();
         assert!(json.contains(r#""message":"Permission required""#));
@@ -263,9 +266,52 @@ mod tests {
             tmux_pane: "%1".into(),
             ts: 1,
             message: None,
+            pid: None,
         };
         let json = serde_json::to_string(&entry).unwrap();
         assert!(!json.contains("message"), "got: {json}");
+    }
+
+    #[test]
+    fn entry_pid_field_roundtrips_when_set() {
+        let entry = AttentionEntry {
+            agent: "claude-code".into(),
+            project: "p".into(),
+            cwd: "/c".into(),
+            event: "notify".into(),
+            tmux_pane: "%1".into(),
+            ts: 1,
+            message: None,
+            pid: Some(42_000),
+        };
+        let json = serde_json::to_string(&entry).unwrap();
+        assert!(json.contains(r#""pid":42000"#));
+        let parsed: AttentionEntry = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.pid, Some(42_000));
+    }
+
+    #[test]
+    fn entry_pid_field_omitted_from_json_when_none() {
+        let entry = AttentionEntry {
+            agent: "claude-code".into(),
+            project: "p".into(),
+            cwd: "/c".into(),
+            event: "done".into(),
+            tmux_pane: "%1".into(),
+            ts: 1,
+            message: None,
+            pid: None,
+        };
+        let json = serde_json::to_string(&entry).unwrap();
+        assert!(!json.contains("pid"), "got: {json}");
+    }
+
+    #[test]
+    fn entry_deserializes_when_pid_field_absent() {
+        // Older state files (no pid field) must still load.
+        let json = r#"{"agent":"claude-code","project":"p","cwd":"/c","event":"done","tmux_pane":"%1","ts":1}"#;
+        let parsed: AttentionEntry = serde_json::from_str(json).unwrap();
+        assert!(parsed.pid.is_none());
     }
 
     #[test]
