@@ -52,8 +52,8 @@ Merge the following into the top-level `hooks` block:
 If you'd rather not edit `~/.claude/settings.json` by hand, you can install the
 wrapper at `extensions/claude-wrapper.sh` as `claude` at the front of your
 `$PATH`. The wrapper finds the real `claude` binary, generates a temporary
-settings file with the agent-status hooks pre-wired, and exec-launches claude
-with `--settings <tmp>`. No settings.json edits required.
+settings file with the agent-status hooks pre-wired, and runs claude
+with `--settings <tmp>` prepended to your args. No settings.json edits required.
 
 ```sh
 mkdir -p ~/.claude/bin
