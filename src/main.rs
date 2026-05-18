@@ -8,7 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use clap::{Parser, Subcommand};
 
-use commands::{build_entry, build_settings_json, format_list, format_preview, format_status};
+use commands::{build_entry, build_extension, format_list, format_preview, format_status};
 use state::StateStore;
 
 /// Tmux-integrated indicator showing which AI coding agent sessions are waiting on user input.
@@ -202,27 +202,25 @@ fn run_agent_extension(agent_name: &str, out: &mut impl Write) -> io::Result<()>
     };
     let bin_path = std::env::current_exe()?;
     let bin_str = bin_path.to_string_lossy();
-    let Some(json) = build_settings_json(&bin_str, agent.name()) else {
+    let Some(extension) = build_extension(&bin_str, agent.name()) else {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            format!("agent has no --settings integration: {agent_name}"),
+            format!("agent has no alias-style integration: {agent_name}"),
         ));
     };
-    let settings_path = settings_path_for(agent.name());
-    if let Some(parent) = settings_path.parent() {
+    let extension_path = extension_path_for(&extension.filename);
+    if let Some(parent) = extension_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    std::fs::write(&settings_path, json)?;
-    writeln!(out, "{}", settings_path.display())?;
+    std::fs::write(&extension_path, extension.content)?;
+    writeln!(out, "{}", extension_path.display())?;
     Ok(())
 }
 
-fn settings_path_for(agent_name: &str) -> std::path::PathBuf {
+fn extension_path_for(filename: &str) -> std::path::PathBuf {
     let base = std::env::var_os("XDG_RUNTIME_DIR")
         .map_or_else(|| std::path::PathBuf::from("/tmp"), std::path::PathBuf::from);
-    base.join("agent-status")
-        .join("extensions")
-        .join(format!("{agent_name}.json"))
+    base.join("agent-status").join("extensions").join(filename)
 }
 
 fn refresh_tmux() {

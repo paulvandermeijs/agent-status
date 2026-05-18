@@ -1,20 +1,35 @@
 use crate::state::AttentionEntry;
 use std::path::Path;
 
-/// Build the Claude Code `--settings` JSON wiring the agent-status hooks to `bin_path`.
+/// One generated extension/settings file: the filename to write it as and the
+/// content to fill it with. Returned by [`build_extension`] for agents that
+/// support a per-launch file-loaded integration (Claude Code's `--settings`,
+/// pi's `-e <path>`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExtensionFile {
+    pub filename: String,
+    pub content: String,
+}
+
+/// Build the extension/settings file an alias-installed agent loads at launch.
 ///
-/// Returns `Some(json)` for agents that support `--settings`-style injection
-/// (currently only `claude-code`); returns `None` for any other agent name. The
-/// JSON wires the same six hooks documented in the README's manual settings
-/// snippet — `Notification`/`Stop` → `set`, `UserPromptSubmit`/`PreToolUse`/
-/// `SessionStart`/`SessionEnd` → `clear`.
-///
-/// `bin_path` is embedded into the `command` strings via `serde_json::json!`
-/// so quotes/backslashes in the path are escaped safely without manual work.
-pub fn build_settings_json(bin_path: &str, agent_name: &str) -> Option<String> {
-    if agent_name != "claude-code" {
-        return None;
+/// Returns `Some(ExtensionFile)` for agents that support a file-argument
+/// integration (`claude-code` uses `--settings <file>`, `pi-coding-agent`
+/// uses `-e <file>`, and `opencode`'s in-process plugin file can be copied
+/// once); returns `None` for any other agent name. The `filename` member is
+/// the basename to write as (`claude-code.json`, `pi-coding-agent.ts`,
+/// `opencode.ts`); the `content` member is the file body.
+pub fn build_extension(bin_path: &str, agent_name: &str) -> Option<ExtensionFile> {
+    match agent_name {
+        "claude-code" => Some(ExtensionFile {
+            filename: "claude-code.json".to_string(),
+            content: build_claude_code_settings(bin_path),
+        }),
+        _ => None,
     }
+}
+
+fn build_claude_code_settings(bin_path: &str) -> String {
     let set_notify = format!("{bin_path} set --agent claude-code notify");
     let set_done = format!("{bin_path} set --agent claude-code done");
     let clear = format!("{bin_path} clear --agent claude-code");
@@ -29,7 +44,7 @@ pub fn build_settings_json(bin_path: &str, agent_name: &str) -> Option<String> {
             "SessionEnd":       [{"hooks": [{"type": "command", "command": clear}]}],
         }
     });
-    Some(serde_json::to_string_pretty(&value).expect("serde_json::Value always serializes"))
+    serde_json::to_string_pretty(&value).expect("serde_json::Value always serializes")
 }
 
 /// Construct an [`AttentionEntry`] from raw inputs.
@@ -443,24 +458,22 @@ mod tests {
     }
 
     #[test]
-    fn build_settings_json_returns_none_for_unknown_agent() {
-        assert!(build_settings_json("/x/agent-status", "pi-coding-agent").is_none());
-        assert!(build_settings_json("/x/agent-status", "opencode").is_none());
-        assert!(build_settings_json("/x/agent-status", "frobnicator").is_none());
+    fn build_extension_returns_none_for_unsupported_agent() {
+        assert!(build_extension("/x/agent-status", "frobnicator").is_none());
     }
 
     #[test]
-    fn build_settings_json_returns_some_for_claude_code() {
-        let json = build_settings_json("/x/agent-status", "claude-code")
+    fn build_extension_returns_some_for_claude_code() {
+        let ext = build_extension("/x/agent-status", "claude-code")
             .expect("claude-code is supported");
-        // Parse-back roundtrip — output must be valid JSON.
-        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(ext.filename, "claude-code.json");
+        let parsed: serde_json::Value = serde_json::from_str(&ext.content).unwrap();
         assert!(parsed.get("hooks").is_some(), "missing top-level hooks key");
     }
 
     #[test]
-    fn build_settings_json_wires_all_six_hook_events() {
-        let json = build_settings_json("/x/agent-status", "claude-code").unwrap();
+    fn build_extension_claude_code_wires_all_six_hook_events() {
+        let ext = build_extension("/x/agent-status", "claude-code").unwrap();
         for event in [
             "Notification",
             "Stop",
@@ -469,29 +482,24 @@ mod tests {
             "SessionStart",
             "SessionEnd",
         ] {
-            assert!(json.contains(event), "missing hook event {event} in: {json}");
+            assert!(ext.content.contains(event), "missing hook event {event}");
         }
     }
 
     #[test]
-    fn build_settings_json_uses_set_and_clear_correctly() {
-        let json = build_settings_json("/path/to/agent-status", "claude-code").unwrap();
-        // Notification → notify, Stop → done.
-        assert!(json.contains("set --agent claude-code notify"));
-        assert!(json.contains("set --agent claude-code done"));
-        // The four clear events all share one command string.
-        assert!(json.contains("clear --agent claude-code"));
-        // Sanity: the binary path is embedded verbatim.
-        assert!(json.contains("/path/to/agent-status"));
+    fn build_extension_claude_code_uses_set_and_clear_correctly() {
+        let ext = build_extension("/path/to/agent-status", "claude-code").unwrap();
+        assert!(ext.content.contains("set --agent claude-code notify"));
+        assert!(ext.content.contains("set --agent claude-code done"));
+        assert!(ext.content.contains("clear --agent claude-code"));
+        assert!(ext.content.contains("/path/to/agent-status"));
     }
 
     #[test]
-    fn build_settings_json_escapes_unsafe_chars_in_bin_path() {
-        // A path with a quote and a backslash would corrupt JSON if interpolated raw.
-        // serde_json::json! handles the escaping for us; verify the output round-trips.
-        let json = build_settings_json(r#"/x/has"quote\and-backslash/agent-status"#, "claude-code")
+    fn build_extension_escapes_unsafe_chars_in_bin_path() {
+        let ext = build_extension(r#"/x/has"quote\and-backslash/agent-status"#, "claude-code")
             .unwrap();
-        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&ext.content).unwrap();
         let command = parsed
             .pointer("/hooks/Notification/0/hooks/0/command")
             .and_then(serde_json::Value::as_str)

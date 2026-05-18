@@ -290,5 +290,5 @@ fn agent_extension_unsupported_agent_exits_nonzero() {
         None,
     );
     assert_ne!(code, 0);
-    assert!(stderr.contains("--settings"), "stderr: {stderr:?}");
+    assert!(stderr.contains("alias-style integration"), "stderr: {stderr:?}");
 }
