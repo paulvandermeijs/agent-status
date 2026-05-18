@@ -241,16 +241,16 @@ fn status_keeps_state_file_with_live_pid() {
 }
 
 #[test]
-fn agent_settings_writes_file_and_prints_path() {
+fn agent_extension_writes_file_and_prints_path() {
     let tmp = TempDir::new().unwrap();
     let state_dir = tmp.path().join("agent-status");
 
-    let (stdout, stderr, code) = run(&state_dir, &["agent-settings"], None);
+    let (stdout, stderr, code) = run(&state_dir, &["agent-extension"], None);
     assert_eq!(code, 0, "stderr: {stderr}");
 
     // The printed path should point at the settings file inside XDG_RUNTIME_DIR.
     let printed_path = stdout.trim_end_matches('\n');
-    let expected = state_dir.join("settings").join("claude-code.json");
+    let expected = state_dir.join("extensions").join("claude-code.json");
     assert_eq!(printed_path, expected.to_string_lossy());
 
     // File must exist with parseable JSON containing the hooks block.
@@ -270,23 +270,23 @@ fn agent_settings_writes_file_and_prints_path() {
 }
 
 #[test]
-fn agent_settings_unknown_agent_exits_nonzero() {
+fn agent_extension_unknown_agent_exits_nonzero() {
     let tmp = TempDir::new().unwrap();
     let state_dir = tmp.path().join("agent-status");
-    let (_, stderr, code) = run(&state_dir, &["agent-settings", "--agent", "frobnicator"], None);
+    let (_, stderr, code) = run(&state_dir, &["agent-extension", "--agent", "frobnicator"], None);
     assert_ne!(code, 0, "should exit non-zero for unknown agent");
     assert!(stderr.contains("unknown agent"), "stderr: {stderr:?}");
 }
 
 #[test]
-fn agent_settings_unsupported_agent_exits_nonzero() {
+fn agent_extension_unsupported_agent_exits_nonzero() {
     // Agents without `--settings` integration (e.g. pi-coding-agent, opencode)
     // should return an error rather than silently producing nothing.
     let tmp = TempDir::new().unwrap();
     let state_dir = tmp.path().join("agent-status");
     let (_, stderr, code) = run(
         &state_dir,
-        &["agent-settings", "--agent", "pi-coding-agent"],
+        &["agent-extension", "--agent", "pi-coding-agent"],
         None,
     );
     assert_ne!(code, 0);

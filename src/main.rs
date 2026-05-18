@@ -60,16 +60,17 @@ enum Cmd {
         /// Session identifier as emitted in column 1 of `list`.
         session_id: String,
     },
-    /// Generate the agent's hook-settings JSON and print its path.
+    /// Generate the agent's extension/settings file and print its path.
     ///
-    /// Intended for use as a shell alias: `alias claude='claude --settings
-    /// "$(agent-status agent-settings)"'`. Writes a fresh JSON file (using
-    /// the current `agent-status` binary's absolute path) to
-    /// `${XDG_RUNTIME_DIR:-/tmp}/agent-status/settings/<agent>.json` and
-    /// prints that path on stdout. Only `claude-code` supports `--settings`-
-    /// style injection today; other agents return an error.
-    AgentSettings {
-        /// Identifier of the agent the settings file should target.
+    /// Intended for use as a shell alias (Claude Code: `alias claude='claude
+    /// --settings "$(agent-status agent-extension)"'`; pi: `alias pi='pi -e
+    /// "$(agent-status agent-extension --agent pi-coding-agent)"'`). Writes
+    /// a fresh file (using the current `agent-status` binary's absolute path)
+    /// to `${XDG_RUNTIME_DIR:-/tmp}/agent-status/extensions/<agent>.<ext>`
+    /// and prints that path on stdout. Each agent emits the file type its
+    /// loader expects (`.json` for Claude Code, `.ts` for pi/opencode).
+    AgentExtension {
+        /// Identifier of the agent the extension file should target.
         #[arg(long, default_value = "claude-code")]
         agent: String,
     },
@@ -87,7 +88,7 @@ fn main() -> ExitCode {
         Cmd::Preview { session_id } => {
             run_preview(&store, &session_id, &mut io::stdout().lock())
         }
-        Cmd::AgentSettings { agent } => run_agent_settings(&agent, &mut io::stdout().lock()),
+        Cmd::AgentExtension { agent } => run_agent_extension(&agent, &mut io::stdout().lock()),
     };
 
     match result {
@@ -192,7 +193,7 @@ fn run_preview(store: &StateStore, session_id: &str, out: &mut impl Write) -> io
     Ok(())
 }
 
-fn run_agent_settings(agent_name: &str, out: &mut impl Write) -> io::Result<()> {
+fn run_agent_extension(agent_name: &str, out: &mut impl Write) -> io::Result<()> {
     let Some(agent) = agents::by_name(agent_name) else {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -220,7 +221,7 @@ fn settings_path_for(agent_name: &str) -> std::path::PathBuf {
     let base = std::env::var_os("XDG_RUNTIME_DIR")
         .map_or_else(|| std::path::PathBuf::from("/tmp"), std::path::PathBuf::from);
     base.join("agent-status")
-        .join("settings")
+        .join("extensions")
         .join(format!("{agent_name}.json"))
 }
 
