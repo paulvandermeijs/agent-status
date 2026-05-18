@@ -115,7 +115,16 @@ fn run_set(store: &StateStore, agent_name: &str, event: &str) -> io::Result<()> 
         .map_or(0, |d| d.as_secs());
 
     let message = agent.extract_message(&buf);
-    let entry = build_entry(agent.name(), event, &cwd, &pane, ts, message.as_deref());
+    let pid = std::os::unix::process::parent_id();
+    let entry = build_entry(
+        agent.name(),
+        event,
+        &cwd,
+        &pane,
+        ts,
+        message.as_deref(),
+        Some(pid),
+    );
     store.write(&session_id, &entry)?;
     refresh_tmux();
     Ok(())
