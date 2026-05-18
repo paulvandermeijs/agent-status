@@ -34,6 +34,13 @@ fn run() -> io::Result<()> {
     let store = StateStore::from_env();
     let mut app = App::new(store);
 
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let _ = disable_raw_mode();
+        let _ = execute!(stdout(), LeaveAlternateScreen, DisableMouseCapture);
+        default_hook(info);
+    }));
+
     enable_raw_mode()?;
     let mut out = stdout();
     execute!(out, EnterAlternateScreen, EnableMouseCapture)?;
