@@ -184,12 +184,13 @@ fn repeated_clear_is_idempotent_and_silent() {
     assert_eq!(stdout, "");
 
     // Second clear of the same session: also no-op.
-    let (_, _, code) = run(
+    let (stdout, _, code) = run(
         &state_dir,
         &["clear"],
         Some(r#"{"session_id":"ghost"}"#),
     );
     assert_eq!(code, 0);
+    assert_eq!(stdout, "", "second no-op clear must stay silent");
 
     // After a set, a clear should still work and a second clear is a no-op.
     let (_, _, code) = run(
@@ -198,18 +199,20 @@ fn repeated_clear_is_idempotent_and_silent() {
         Some(r#"{"session_id":"s"}"#),
     );
     assert_eq!(code, 0);
-    let (_, _, code) = run(
+    let (stdout, _, code) = run(
         &state_dir,
         &["clear"],
         Some(r#"{"session_id":"s"}"#),
     );
     assert_eq!(code, 0);
-    let (_, _, code) = run(
+    assert_eq!(stdout, "", "clear of a previously-set session must stay silent");
+    let (stdout, _, code) = run(
         &state_dir,
         &["clear"],
         Some(r#"{"session_id":"s"}"#),
     );
     assert_eq!(code, 0);
+    assert_eq!(stdout, "", "follow-up clear of cleared session must stay silent");
 }
 
 #[test]
