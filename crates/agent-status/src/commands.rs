@@ -41,14 +41,15 @@ pub fn build_extension(bin_path: &str, agent_name: &str) -> Option<ExtensionFile
 fn build_claude_code_settings(bin_path: &str) -> String {
     let set_notify = format!("{bin_path} set --agent claude-code notify");
     let set_done = format!("{bin_path} set --agent claude-code done");
+    let set_working = format!("{bin_path} set --agent claude-code working");
     let clear = format!("{bin_path} clear --agent claude-code");
 
     let value = serde_json::json!({
         "hooks": {
             "Notification":     [{"hooks": [{"type": "command", "command": set_notify}]}],
             "Stop":             [{"hooks": [{"type": "command", "command": set_done}]}],
-            "UserPromptSubmit": [{"hooks": [{"type": "command", "command": clear}]}],
-            "PreToolUse":       [{"hooks": [{"type": "command", "command": clear}]}],
+            "UserPromptSubmit": [{"hooks": [{"type": "command", "command": set_working}]}],
+            "PreToolUse":       [{"hooks": [{"type": "command", "command": set_working}]}],
             "SessionStart":     [{"hooks": [{"type": "command", "command": clear}]}],
             "SessionEnd":       [{"hooks": [{"type": "command", "command": clear}]}],
         }
@@ -639,5 +640,51 @@ mod tests {
             "BIN line not escaped correctly; got:\n{}",
             ext.content,
         );
+    }
+
+    #[test]
+    fn build_extension_claude_code_user_prompt_submit_sets_working() {
+        let ext = build_extension("/path/agent-status", "claude-code").unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&ext.content).unwrap();
+        let cmd = parsed
+            .pointer("/hooks/UserPromptSubmit/0/hooks/0/command")
+            .and_then(serde_json::Value::as_str)
+            .expect("UserPromptSubmit command");
+        assert!(
+            cmd.contains("set --agent claude-code working"),
+            "got: {cmd}",
+        );
+    }
+
+    #[test]
+    fn build_extension_claude_code_pre_tool_use_sets_working() {
+        let ext = build_extension("/path/agent-status", "claude-code").unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&ext.content).unwrap();
+        let cmd = parsed
+            .pointer("/hooks/PreToolUse/0/hooks/0/command")
+            .and_then(serde_json::Value::as_str)
+            .expect("PreToolUse command");
+        assert!(
+            cmd.contains("set --agent claude-code working"),
+            "got: {cmd}",
+        );
+    }
+
+    #[test]
+    fn build_extension_claude_code_session_lifecycle_still_clears() {
+        // SessionStart and SessionEnd remain `clear` — they end the session,
+        // they don't represent active work.
+        let ext = build_extension("/path/agent-status", "claude-code").unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&ext.content).unwrap();
+        for event in ["SessionStart", "SessionEnd"] {
+            let cmd = parsed
+                .pointer(&format!("/hooks/{event}/0/hooks/0/command"))
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_else(|| panic!("missing {event} command"));
+            assert!(
+                cmd.contains("clear --agent claude-code"),
+                "{event} should still clear; got: {cmd}",
+            );
+        }
     }
 }
