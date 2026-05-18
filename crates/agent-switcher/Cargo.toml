@@ -1,0 +1,20 @@
+[package]
+name = "agent-switcher"
+version.workspace = true
+edition.workspace = true
+description = "Tmux popup TUI for switching between waiting AI coding agent sessions."
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "agent-switcher"
+path = "src/main.rs"
+
+[dependencies]
+agent-status = { path = "../agent-status" }
+ratatui = "0.29"
+crossterm = "0.28"
+
+[dev-dependencies]
+tempfile = "3"
