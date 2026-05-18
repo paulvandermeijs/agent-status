@@ -47,6 +47,41 @@ Merge the following into the top-level `hooks` block:
 }
 ```
 
+### Claude Code wrapper (optional, zero-config)
+
+If you'd rather not edit `~/.claude/settings.json` by hand, you can install the
+wrapper at `extensions/claude-wrapper.sh` as `claude` at the front of your
+`$PATH`. The wrapper finds the real `claude` binary, generates a temporary
+settings file with the agent-status hooks pre-wired, and exec-launches claude
+with `--settings <tmp>`. No settings.json edits required.
+
+```sh
+mkdir -p ~/.claude/bin
+cp extensions/claude-wrapper.sh ~/.claude/bin/claude
+chmod +x ~/.claude/bin/claude
+# Ensure ~/.claude/bin is at the FRONT of your $PATH.
+```
+
+The wrapper is **passthrough by default outside tmux** (it gates on `TMUX_PANE`)
+so leaving it installed everywhere is safe — only sessions launched from a
+tmux pane get the hook injection. Other gates:
+
+| Env var | Effect |
+|---|---|
+| `AGENT_STATUS_CLAUDE_WRAPPER_DISABLED=1` | Disable the wrapper for this invocation (full passthrough). |
+| `AGENT_STATUS_CLAUDE_WRAPPER_FORCE=1` | Activate even outside tmux. |
+| `AGENT_STATUS_BIN` | Override the path to the `agent-status` binary the wrapper bakes into the generated settings. Default: `~/.claude/bin/agent-status`. |
+
+The wrapper merges with any hooks already in your `~/.claude/settings.json`
+(Claude Code merges `--settings` files on top of user/project settings). If
+you have your own agent-status hooks wired there already, remove them
+before installing the wrapper — otherwise each event fires twice (idempotent
+for `clear`, harmless-but-wasteful for `set`).
+
+If `agent-status` itself isn't installed at `$AGENT_STATUS_BIN`, the wrapper
+detects this and silently falls through to the real claude — useful for
+shared dotfiles where not every host has agent-status built.
+
 ### pi (`~/.pi/agent/extensions/`)
 
 Pi extensions run in-process, so the integration ships as a single TypeScript file you drop into pi's auto-discovery directory. Copy `extensions/pi-coding-agent.ts` from this repo:
