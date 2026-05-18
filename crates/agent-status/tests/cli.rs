@@ -334,3 +334,45 @@ fn agent_extension_opencode_writes_ts_file() {
     );
     assert!(contents.contains("AgentStatusPlugin"));
 }
+
+#[test]
+fn working_status_is_recorded_but_hidden_from_indicator_and_list() {
+    let tmp = TempDir::new().unwrap();
+    let state_dir = tmp.path().join("agent-status");
+
+    // Record a working session.
+    let (_, _, code) = run(
+        &state_dir,
+        &["set", "working"],
+        Some(r#"{"session_id":"sess-work"}"#),
+    );
+    assert_eq!(code, 0);
+
+    // The state file should exist.
+    assert!(state_dir.join("sess-work").exists());
+
+    // `status` should still print nothing (working doesn't surface).
+    let (stdout, _, code) = run(&state_dir, &["status"], None);
+    assert_eq!(code, 0);
+    assert_eq!(stdout, "");
+
+    // `list` should be empty too — working entries are for the switcher only.
+    let (stdout, _, code) = run(&state_dir, &["list"], None);
+    assert_eq!(code, 0);
+    assert_eq!(stdout, "");
+
+    // A second session that's actually waiting *should* surface.
+    let (_, _, code) = run(
+        &state_dir,
+        &["set", "notify"],
+        Some(r#"{"session_id":"sess-wait"}"#),
+    );
+    assert_eq!(code, 0);
+
+    let (stdout, _, _) = run(&state_dir, &["status"], None);
+    assert!(stdout.starts_with("[!] "), "got: {stdout:?}");
+    let (stdout, _, _) = run(&state_dir, &["list"], None);
+    let lines: Vec<&str> = stdout.lines().collect();
+    assert_eq!(lines.len(), 1, "got: {lines:?}");
+    assert!(lines[0].contains("sess-wait"));
+}
