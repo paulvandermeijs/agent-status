@@ -129,7 +129,7 @@ mkdir -p ~/.config/opencode/plugins
 cp extensions/opencode.ts ~/.config/opencode/plugins/
 ```
 
-This version uses `process.env.AGENT_STATUS_BIN ?? \`${process.env.HOME}/.claude/bin/agent-status\`` for the binary path. If your `agent-status` binary is not at `~/.claude/bin/agent-status`, set `AGENT_STATUS_BIN` in your shell environment before launching opencode.
+This version resolves the binary path from the `AGENT_STATUS_BIN` env var, defaulting to `~/.claude/bin/agent-status`. If your binary lives elsewhere, set `AGENT_STATUS_BIN` in your shell environment before launching opencode.
 
 ### tmux (`~/.tmux.conf`)
 
