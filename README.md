@@ -15,7 +15,7 @@ $ agent-status status        # nothing waiting
 
 ## How it works
 
-Claude Code [hooks][hooks] fire `agent-status set` on `Notification` and `Stop`, and `agent-status clear` on `UserPromptSubmit` / `SessionStart` / `SessionEnd`. Each `set` writes one JSON file per session under `${XDG_RUNTIME_DIR:-/tmp}/agent-status/`, keyed by `session_id`. tmux's `status-right` invokes `agent-status status` on its refresh interval; the command lists the state directory and renders the indicator (project name for one waiting session, count for many, nothing for none).
+Claude Code [hooks][hooks] fire `agent-status set` on `Notification` and `Stop`, and `agent-status clear` on `UserPromptSubmit` / `PreToolUse` / `SessionStart` / `SessionEnd`. Each `set` writes one JSON file per session under `${XDG_RUNTIME_DIR:-/tmp}/agent-status/`, keyed by `session_id`. tmux's `status-right` invokes `agent-status status` on its refresh interval; the command lists the state directory and renders the indicator (project name for one waiting session, count for many, nothing for none).
 
 No daemon. The filesystem is the state store; each session writes only its own keyed file, so concurrent writers never contend.
 
@@ -41,11 +41,14 @@ Merge the following into the top-level `hooks` block:
     "Notification":     [{ "hooks": [{ "type": "command", "command": "$HOME/.claude/bin/agent-status set --agent claude-code notify" }] }],
     "Stop":             [{ "hooks": [{ "type": "command", "command": "$HOME/.claude/bin/agent-status set --agent claude-code done"   }] }],
     "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "$HOME/.claude/bin/agent-status clear --agent claude-code"      }] }],
+    "PreToolUse":       [{ "hooks": [{ "type": "command", "command": "$HOME/.claude/bin/agent-status clear --agent claude-code"      }] }],
     "SessionStart":     [{ "hooks": [{ "type": "command", "command": "$HOME/.claude/bin/agent-status clear --agent claude-code"      }] }],
     "SessionEnd":       [{ "hooks": [{ "type": "command", "command": "$HOME/.claude/bin/agent-status clear --agent claude-code"      }] }]
   }
 }
 ```
+
+The `PreToolUse` hook fires before every tool call Claude makes. The hook issues a `clear` — which is idempotent — so the agent-status indicator correctly transitions out of "Needs Input" the moment Claude resumes work after you grant a permission, instead of staying "Needs Input" until the next `Stop` fires (which may be many tool calls later). The `PreToolUse` hook fires often, but `clear` skips refreshing tmux when there's nothing to remove, so the steady-state cost is one filesystem stat per tool call.
 
 ### Claude Code wrapper (optional, zero-config)
 
