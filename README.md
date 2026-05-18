@@ -96,16 +96,18 @@ cp extensions/pi-coding-agent.ts ~/.pi/agent/extensions/
 
 pi auto-discovers `~/.pi/agent/extensions/*.ts` on startup; no further configuration is required. If your `agent-status` binary is not at `~/.claude/bin/agent-status`, set `AGENT_STATUS_BIN` in your shell environment before launching pi — the manual copy uses the env-var fallback the alias bypasses.
 
-### opencode (`~/.config/opencode/plugins/`)
+### opencode
 
-opencode plugins run in-process, so the integration ships as a single TypeScript file you drop into opencode's auto-discovery directory. Copy `extensions/opencode.ts` from this repo:
+opencode discovers plugins from `~/.config/opencode/plugins/` (global) or `.opencode/plugins/` (per-project) at startup — there's no per-launch extension flag, so the alias pattern can't apply. Generate the plugin and copy it once:
 
 ```sh
 mkdir -p ~/.config/opencode/plugins
-cp extensions/opencode.ts ~/.config/opencode/plugins/
+cp "$(agent-status agent-extension --agent opencode)" ~/.config/opencode/plugins/agent-status.ts
 ```
 
-opencode auto-discovers files in `~/.config/opencode/plugins/` (global) and `.opencode/plugins/` (per-project) at startup; no further configuration is required. The plugin fires on these opencode events:
+`agent-status agent-extension --agent opencode` writes a regenerated `${XDG_RUNTIME_DIR:-/tmp}/agent-status/extensions/opencode.ts` with the absolute path to the current `agent-status` binary baked in, and prints that path. The `cp` lands a fresh copy in opencode's discovery directory. Re-run this whenever you move or rebuild the `agent-status` binary so the baked-in path stays correct.
+
+The plugin fires on these opencode events:
 
 | opencode event       | agent-status call                                 |
 |----------------------|---------------------------------------------------|
@@ -116,9 +118,18 @@ opencode auto-discovers files in `~/.config/opencode/plugins/` (global) and `.op
 
 In practice opencode persists sessions for resume, so `session.deleted` rarely fires on graceful exit — the `clear` arm is defensive. `session.created` likewise fires once at the start of each new session and resolves to a no-op clear (no state file to remove yet); it exists so a stale state file from a previous crash gets dropped at session start.
 
-If your `agent-status` binary is not at `~/.claude/bin/agent-status`, set `AGENT_STATUS_BIN` in your shell environment before launching opencode.
-
 Unlike pi, opencode emits a `permission.updated` event when an agent pauses for a permission prompt, so opencode supports both `notify` and `done` indicator states (full feature parity with Claude Code). The one wart: opencode has no event for "user submitted a prompt", so after a turn ends the indicator stays on `done` while the user types the next prompt — by design, since the session *is* the one that needs your attention.
+
+#### Wiring the plugin manually (fallback)
+
+If you'd rather use the source `.ts` file directly (e.g. for shared dotfiles that bundle this repo as a submodule), copy `extensions/opencode.ts` instead:
+
+```sh
+mkdir -p ~/.config/opencode/plugins
+cp extensions/opencode.ts ~/.config/opencode/plugins/
+```
+
+This version uses `process.env.AGENT_STATUS_BIN ?? \`${process.env.HOME}/.claude/bin/agent-status\`` for the binary path. If your `agent-status` binary is not at `~/.claude/bin/agent-status`, set `AGENT_STATUS_BIN` in your shell environment before launching opencode.
 
 ### tmux (`~/.tmux.conf`)
 
