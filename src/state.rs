@@ -148,16 +148,28 @@ impl StateStore {
 /// `unsafe_code = "forbid"`. The cost is one fork+exec of `/bin/kill` per
 /// entry checked; with the typical handful of waiting sessions this is well
 /// under a millisecond and fires only on `agent-status status`/`list`/`preview`.
+///
+/// Fails open: if the `kill` command can't be spawned at all (no `/bin/kill`,
+/// stripped `$PATH` in a hardened user-service env, …), we return `true` so
+/// the caller keeps the state file. Pruning every live entry on an unrelated
+/// platform misconfiguration would be much worse than skipping the prune.
 fn is_pid_alive(pid: u32) -> bool {
     if pid == 0 {
         return false;
     }
-    std::process::Command::new("kill")
+    // Absolute path so a stripped or hostile $PATH can't shadow us with a
+    // fake `kill`. /bin/kill is present on every POSIX target this crate
+    // supports (Darwin, Linux). Falls through to a $PATH lookup only if the
+    // absolute path doesn't exist.
+    let status = std::process::Command::new("/bin/kill")
         .args(["-0", &pid.to_string()])
         .stderr(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
-        .status()
-        .is_ok_and(|s| s.success())
+        .status();
+    match status {
+        Ok(s) => s.success(),
+        Err(_) => true,
+    }
 }
 
 fn validate_session_id(session_id: &str) -> io::Result<()> {

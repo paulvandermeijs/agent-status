@@ -168,3 +168,28 @@ fn status_prunes_state_file_with_dead_pid() {
         "stale state file should have been pruned by the status read",
     );
 }
+
+#[test]
+fn status_keeps_state_file_with_live_pid() {
+    // Companion to status_prunes_state_file_with_dead_pid: pins the inverse
+    // invariant — entries owned by a live process survive the prune. Uses the
+    // test runner's own pid, which is guaranteed alive for the duration of
+    // the spawned subprocess.
+    let tmp = TempDir::new().unwrap();
+    let state_dir = tmp.path().join("agent-status");
+    std::fs::create_dir_all(&state_dir).unwrap();
+
+    let live_pid = std::process::id();
+    let json = format!(
+        r#"{{"agent":"claude-code","project":"alive","cwd":"/x","event":"notify","tmux_pane":"","ts":1,"pid":{live_pid}}}"#
+    );
+    std::fs::write(state_dir.join("alive-session"), json).unwrap();
+
+    let (stdout, _, code) = run(&state_dir, &["status"], None);
+    assert_eq!(code, 0);
+    assert!(stdout.starts_with("[!] "), "live entry should appear in status, got: {stdout:?}");
+    assert!(
+        state_dir.join("alive-session").exists(),
+        "live state file must not be pruned",
+    );
+}
