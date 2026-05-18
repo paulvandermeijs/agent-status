@@ -78,17 +78,22 @@ impl StateStore {
         fs::write(self.dir.join(session_id), json)
     }
 
-    /// Remove the entry for `session_id`. Idempotent: returns `Ok(())` when the file is absent.
+    /// Remove the entry for `session_id`. Idempotent: returns `Ok(false)` when
+    /// the file is absent and `Ok(true)` when a file was actually deleted.
+    ///
+    /// Callers can use the bool to skip side effects (e.g. tmux refresh) on
+    /// no-op clears — relevant for hooks like Claude Code's `PreToolUse` that
+    /// fire on every tool call and would otherwise generate excessive refreshes.
     ///
     /// # Errors
-    /// Returns the underlying I/O error if removal fails for a reason other than `NotFound`.
-    /// Returns [`io::ErrorKind::InvalidInput`] when `session_id` is empty or contains a
-    /// path separator.
-    pub fn remove(&self, session_id: &str) -> io::Result<()> {
+    /// Returns the underlying I/O error if removal fails for a reason other
+    /// than `NotFound`. Returns [`io::ErrorKind::InvalidInput`] when
+    /// `session_id` is empty or contains a path separator.
+    pub fn remove(&self, session_id: &str) -> io::Result<bool> {
         validate_session_id(session_id)?;
         match fs::remove_file(self.dir.join(session_id)) {
-            Ok(()) => Ok(()),
-            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
+            Ok(()) => Ok(true),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(false),
             Err(e) => Err(e),
         }
     }
@@ -260,11 +265,29 @@ mod tests {
     fn remove_is_idempotent() {
         let dir = TempDir::new().unwrap();
         let store = StateStore::new(dir.path().into());
-        store.remove("never-existed").unwrap();
+        assert!(!store.remove("never-existed").unwrap());
+        store.write("s1", &sample_entry("p")).unwrap();
+        assert!(store.remove("s1").unwrap());
+        assert!(!store.remove("s1").unwrap());
+        assert_eq!(store.list().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn remove_returns_true_when_file_was_present() {
+        let dir = TempDir::new().unwrap();
+        let store = StateStore::new(dir.path().into());
+        store.write("s1", &sample_entry("p")).unwrap();
+        assert!(store.remove("s1").unwrap(), "first remove should report deletion");
+    }
+
+    #[test]
+    fn remove_returns_false_when_file_was_already_absent() {
+        let dir = TempDir::new().unwrap();
+        let store = StateStore::new(dir.path().into());
+        assert!(!store.remove("never-existed").unwrap());
         store.write("s1", &sample_entry("p")).unwrap();
         store.remove("s1").unwrap();
-        store.remove("s1").unwrap();
-        assert_eq!(store.list().unwrap().len(), 0);
+        assert!(!store.remove("s1").unwrap(), "second remove should report no-op");
     }
 
     #[test]
