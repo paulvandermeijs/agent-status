@@ -64,27 +64,37 @@ Pick one route, not both. If you have manual hooks AND the alias, each event fir
 
 The `PreToolUse` hook fires before every tool call Claude makes. The hook issues a `clear` — which is idempotent — so the agent-status indicator transitions out of "Needs Input" the moment Claude resumes work after you grant a permission, instead of staying "Needs Input" until the next `Stop` fires (which may be many tool calls later). The `PreToolUse` hook fires often, but `clear` skips refreshing tmux when there's nothing to remove, so the steady-state cost is one filesystem stat per tool call.
 
-### pi (`~/.pi/agent/extensions/`)
+### pi
 
-Pi extensions run in-process, so the integration ships as a single TypeScript file you drop into pi's auto-discovery directory. Copy `extensions/pi-coding-agent.ts` from this repo:
+Drop this alias into your shell rc (`.zshrc`, `.bashrc`, etc.):
+
+```sh
+alias pi='pi -e "$(agent-status agent-extension --agent pi-coding-agent)"'
+```
+
+Each `pi` invocation regenerates `${XDG_RUNTIME_DIR:-/tmp}/agent-status/extensions/pi-coding-agent.ts` with the absolute path to the current `agent-status` binary baked into the bridge's `BIN` constant. pi's `-e <path>` flag loads the file as a one-shot extension, alongside whatever else you have under `~/.pi/agent/extensions/`.
+
+The extension fires on these pi lifecycle events:
+
+| pi event              | agent-status call                                 |
+|-----------------------|---------------------------------------------------|
+| `before_agent_start`  | `clear --agent pi-coding-agent` (user submitted a prompt) |
+| `agent_end`           | `set --agent pi-coding-agent done` (agent finished a turn) |
+| `session_start`       | `clear --agent pi-coding-agent`                   |
+| `session_shutdown`    | `clear --agent pi-coding-agent`                   |
+
+**Known limitation:** pi has no built-in "agent paused waiting for permission" event analogous to Claude Code's `Notification` hook — pi extensions handle confirmations in-process via `ctx.ui.confirm()`. So pi-coding-agent surfaces the "done" state but not a separate "needs attention" state. In practice the dominant signal is "agent finished a turn, waiting on next prompt" anyway.
+
+#### Wiring the extension manually (fallback)
+
+Prefer to drop the bridge into pi's discovery directory? Skip the alias and copy the file once:
 
 ```sh
 mkdir -p ~/.pi/agent/extensions
 cp extensions/pi-coding-agent.ts ~/.pi/agent/extensions/
 ```
 
-Pi auto-discovers `~/.pi/agent/extensions/*.ts` on startup; no further configuration is required. The extension fires on these pi lifecycle events:
-
-| pi event              | agent-status call                              |
-|-----------------------|------------------------------------------------|
-| `before_agent_start`  | `clear --agent pi-coding-agent` (user submitted a prompt) |
-| `agent_end`           | `set --agent pi-coding-agent done` (agent finished a turn) |
-| `session_start`       | `clear --agent pi-coding-agent`                |
-| `session_shutdown`    | `clear --agent pi-coding-agent`                |
-
-If your `agent-status` binary is not at `~/.claude/bin/agent-status`, set `AGENT_STATUS_BIN` in your shell environment before launching pi.
-
-**Known limitation:** pi has no built-in "agent paused waiting for permission" event analogous to Claude Code's `Notification` hook — pi extensions handle confirmations in-process via `ctx.ui.confirm()`. So pi-coding-agent surfaces the "done" state but not a separate "needs attention" state. In practice the dominant signal is "agent finished a turn, waiting on next prompt" anyway.
+pi auto-discovers `~/.pi/agent/extensions/*.ts` on startup; no further configuration is required. If your `agent-status` binary is not at `~/.claude/bin/agent-status`, set `AGENT_STATUS_BIN` in your shell environment before launching pi — the manual copy uses the env-var fallback the alias bypasses.
 
 ### opencode (`~/.config/opencode/plugins/`)
 
