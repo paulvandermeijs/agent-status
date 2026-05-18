@@ -170,6 +170,49 @@ fn status_prunes_state_file_with_dead_pid() {
 }
 
 #[test]
+fn repeated_clear_is_idempotent_and_silent() {
+    let tmp = TempDir::new().unwrap();
+    let state_dir = tmp.path().join("agent-status");
+
+    // First clear of a never-set session: should be a clean no-op.
+    let (stdout, stderr, code) = run(
+        &state_dir,
+        &["clear"],
+        Some(r#"{"session_id":"ghost"}"#),
+    );
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "");
+
+    // Second clear of the same session: also no-op.
+    let (_, _, code) = run(
+        &state_dir,
+        &["clear"],
+        Some(r#"{"session_id":"ghost"}"#),
+    );
+    assert_eq!(code, 0);
+
+    // After a set, a clear should still work and a second clear is a no-op.
+    let (_, _, code) = run(
+        &state_dir,
+        &["set", "notify"],
+        Some(r#"{"session_id":"s"}"#),
+    );
+    assert_eq!(code, 0);
+    let (_, _, code) = run(
+        &state_dir,
+        &["clear"],
+        Some(r#"{"session_id":"s"}"#),
+    );
+    assert_eq!(code, 0);
+    let (_, _, code) = run(
+        &state_dir,
+        &["clear"],
+        Some(r#"{"session_id":"s"}"#),
+    );
+    assert_eq!(code, 0);
+}
+
+#[test]
 fn status_keeps_state_file_with_live_pid() {
     // Companion to status_prunes_state_file_with_dead_pid: pins the inverse
     // invariant — entries owned by a live process survive the prune. Uses the
