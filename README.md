@@ -51,19 +51,19 @@ If you'd rather see the hooks in your settings file, skip the alias and merge th
 ```json
 {
   "hooks": {
-    "Notification":     [{ "hooks": [{ "type": "command", "command": "$HOME/.claude/bin/agent-status set --agent claude-code notify" }] }],
-    "Stop":             [{ "hooks": [{ "type": "command", "command": "$HOME/.claude/bin/agent-status set --agent claude-code done"   }] }],
-    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "$HOME/.claude/bin/agent-status clear --agent claude-code"      }] }],
-    "PreToolUse":       [{ "hooks": [{ "type": "command", "command": "$HOME/.claude/bin/agent-status clear --agent claude-code"      }] }],
-    "SessionStart":     [{ "hooks": [{ "type": "command", "command": "$HOME/.claude/bin/agent-status clear --agent claude-code"      }] }],
-    "SessionEnd":       [{ "hooks": [{ "type": "command", "command": "$HOME/.claude/bin/agent-status clear --agent claude-code"      }] }]
+    "Notification":     [{ "hooks": [{ "type": "command", "command": "$HOME/.claude/bin/agent-status set --agent claude-code notify"  }] }],
+    "Stop":             [{ "hooks": [{ "type": "command", "command": "$HOME/.claude/bin/agent-status set --agent claude-code done"    }] }],
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "$HOME/.claude/bin/agent-status set --agent claude-code working" }] }],
+    "PreToolUse":       [{ "hooks": [{ "type": "command", "command": "$HOME/.claude/bin/agent-status set --agent claude-code working" }] }],
+    "SessionStart":     [{ "hooks": [{ "type": "command", "command": "$HOME/.claude/bin/agent-status clear --agent claude-code"       }] }],
+    "SessionEnd":       [{ "hooks": [{ "type": "command", "command": "$HOME/.claude/bin/agent-status clear --agent claude-code"       }] }]
   }
 }
 ```
 
-Pick one route, not both. If you have manual hooks AND the alias, each event fires twice — idempotent for `clear` but wasteful for `set`.
+Pick one route, not both. If you have manual hooks AND the alias, each event fires twice — idempotent for repeats of the same `set` but wasteful.
 
-The `PreToolUse` hook fires before every tool call Claude makes. The hook issues a `clear` — which is idempotent — so the agent-status indicator transitions out of "Needs Input" the moment Claude resumes work after you grant a permission, instead of staying "Needs Input" until the next `Stop` fires (which may be many tool calls later). The `PreToolUse` hook fires often, but `clear` skips refreshing tmux when there's nothing to remove, so the steady-state cost is one filesystem stat per tool call.
+`UserPromptSubmit` and `PreToolUse` both `set ... working` so an in-flight session is recorded in the state directory; the tmux status indicator filters `working` entries out, so the bar still only shows "needs you now" sessions while the `agent-switcher` popup shows working sessions with a spinner.
 
 ### pi
 
@@ -92,7 +92,7 @@ Prefer to drop the bridge into pi's discovery directory? Skip the alias and copy
 
 ```sh
 mkdir -p ~/.pi/agent/extensions
-cp extensions/pi-coding-agent.ts ~/.pi/agent/extensions/
+cp crates/agent-status/extensions/pi-coding-agent.ts ~/.pi/agent/extensions/
 ```
 
 pi auto-discovers `~/.pi/agent/extensions/*.ts` on startup; no further configuration is required. If your `agent-status` binary is not at `~/.claude/bin/agent-status`, set `AGENT_STATUS_BIN` in your shell environment before launching pi — the manual copy uses the env-var fallback the alias bypasses.
@@ -123,11 +123,11 @@ Unlike pi, opencode emits a `permission.updated` event when an agent pauses for 
 
 #### Wiring the plugin manually (fallback)
 
-If you'd rather use the source `.ts` file directly (e.g. for shared dotfiles that bundle this repo as a submodule), copy `extensions/opencode.ts` instead:
+If you'd rather use the source `.ts` file directly (e.g. for shared dotfiles that bundle this repo as a submodule), copy `crates/agent-status/extensions/opencode.ts` instead:
 
 ```sh
 mkdir -p ~/.config/opencode/plugins
-cp extensions/opencode.ts ~/.config/opencode/plugins/
+cp crates/agent-status/extensions/opencode.ts ~/.config/opencode/plugins/
 ```
 
 This version resolves the binary path from the `AGENT_STATUS_BIN` env var, defaulting to `~/.claude/bin/agent-status`. If your binary lives elsewhere, set `AGENT_STATUS_BIN` in your shell environment before launching opencode.
@@ -180,14 +180,14 @@ before this field existed still load — `message` defaults to absent.
 
 The `agent` field is `"claude-code"`, `"opencode"`, or `"pi-coding-agent"`; new agents use their own lowercase-hyphenated name.
 
-The `pid` field records the agent process's PID (typically the claude / opencode / pi binary) so `agent-status status`, `list`, and `preview` can detect and remove entries whose owning process has died without firing its session-end hook. Files written by older binaries or the bash precursor — which lack `pid` — are never auto-pruned; they age out only on tmpfs cleanup. Such entries should disappear naturally after one `set`/`clear` cycle on the affected session.
+The `pid` field records the agent process's PID (typically the claude / opencode / pi binary) so `agent-status status` and `list` (and `agent-switcher`'s state-directory polls) can detect and remove entries whose owning process has died without firing its session-end hook. Files written by older binaries or the bash precursor — which lack `pid` — are never auto-pruned; they age out only on tmpfs cleanup. Such entries should disappear naturally after one `set`/`clear` cycle on the affected session.
 
 ## Development
 
 ```sh
-cargo test                                                   # 100 tests (87 unit + 13 integration)
+cargo test                                                   # 120 tests (108 unit + 12 integration)
 cargo clippy --all-targets --all-features --locked -- -D warnings
-cargo build --release                                        # ~500 KB stripped binary
+cargo build --release                                        # two binaries, ≈1.1 MB combined
 ```
 
 ## Caveats

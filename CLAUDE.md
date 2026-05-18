@@ -58,9 +58,9 @@ serde/clap/serde_json.
 
 ## Adding a new agent
 
-Each AI coding agent we integrate with lives in its own file under `src/agents/`. To plug in a new one:
+Each AI coding agent we integrate with lives in its own file under `crates/agent-status/src/agents/`. To plug in a new one:
 
-1. Create `src/agents/<agent>.rs` with a unit struct (e.g. `pub struct CodexCliAgent;`) implementing `agents::Agent` (in `src/agents/mod.rs`). Implement `name()` returning the lowercase hyphenated identifier (e.g. `"codex-cli"`) and `extract_session_id()` parsing whatever field the agent's hook payload uses for the session/conversation key.
+1. Create `crates/agent-status/src/agents/<agent>.rs` with a unit struct (e.g. `pub struct CodexCliAgent;`) implementing `agents::Agent` (in `crates/agent-status/src/agents/mod.rs`). Implement `name()` returning the lowercase hyphenated identifier (e.g. `"codex-cli"`) and `extract_session_id()` parsing whatever field the agent's hook payload uses for the session/conversation key.
 2. Register the new agent in `agents::by_name` so the CLI's `--agent` flag can resolve it.
 3. Add unit tests for `extract_session_id` covering the four standard cases (valid id, missing field, empty string, invalid JSON) plus any field-name-specific edge cases (e.g. Cursor's `conversation_id` vs `session_id` switch on `sessionStart`).
 4. Document the agent's hook config in README.md alongside the existing Claude Code section.

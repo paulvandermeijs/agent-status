@@ -154,7 +154,8 @@ impl StateStore {
 /// We deliberately do not use `libc::kill` directly so the crate keeps
 /// `unsafe_code = "forbid"`. The cost is one fork+exec of `/bin/kill` per
 /// entry checked; with the typical handful of waiting sessions this is well
-/// under a millisecond and fires only on `agent-status status`/`list`/`preview`.
+/// under a millisecond and fires only on `agent-status status`/`list` and
+/// `agent-switcher`'s tick (state-directory refresh).
 ///
 /// Fails open: if the `kill` command can't be spawned at all (no `/bin/kill`,
 /// stripped `$PATH` in a hardened user-service env, …), we return `true` so
