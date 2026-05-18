@@ -4,7 +4,6 @@
 /// Subset of [`agent_status::AttentionEntry`] fields the filter cares about.
 /// Borrowing-only so callers don't pay for clones during filter evaluation.
 #[derive(Debug, Clone, Copy)]
-#[allow(dead_code)]
 pub struct FilterRow<'a> {
     pub session_id: &'a str,
     pub project: &'a str,
@@ -17,7 +16,6 @@ pub struct FilterRow<'a> {
 /// Matching is case-insensitive substring across `project`, `agent`, `message`,
 /// and `session_id`. An empty filter matches everything.
 #[must_use]
-#[allow(dead_code)]
 pub fn matches(row: FilterRow<'_>, filter: &str) -> bool {
     if filter.is_empty() {
         return true;
