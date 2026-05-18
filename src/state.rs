@@ -105,13 +105,24 @@ impl StateStore {
             if !entry.file_type()?.is_file() {
                 continue;
             }
+            let path = entry.path();
             let name = entry.file_name().to_string_lossy().into_owned();
-            let Ok(bytes) = fs::read(entry.path()) else {
+            let Ok(bytes) = fs::read(&path) else {
                 continue;
             };
-            if let Ok(parsed) = serde_json::from_slice::<AttentionEntry>(&bytes) {
-                out.push((name, parsed));
+            let Ok(parsed) = serde_json::from_slice::<AttentionEntry>(&bytes) else {
+                continue;
+            };
+            // Auto-prune entries whose owning process is dead. Entries with no
+            // recorded pid (older binaries; bash precursor) are kept as-is — we
+            // have no way to verify their liveness.
+            if let Some(pid) = parsed.pid {
+                if !is_pid_alive(pid) {
+                    let _ = fs::remove_file(&path);
+                    continue;
+                }
             }
+            out.push((name, parsed));
         }
         out.sort_by(|a, b| a.1.ts.cmp(&b.1.ts).then_with(|| a.0.cmp(&b.0)));
         Ok(out)
@@ -129,7 +140,6 @@ impl StateStore {
 /// `unsafe_code = "forbid"`. The cost is one fork+exec of `/bin/kill` per
 /// entry checked; with the typical handful of waiting sessions this is well
 /// under a millisecond and fires only on `agent-status status`/`list`/`preview`.
-#[allow(dead_code)] // wired into StateStore::list in the next commit
 fn is_pid_alive(pid: u32) -> bool {
     if pid == 0 {
         return false;
@@ -377,5 +387,36 @@ mod tests {
         // must reject pid 0 explicitly so a corrupted state file with pid:0 doesn't
         // accidentally keep itself alive.
         assert!(!is_pid_alive(0));
+    }
+
+    #[test]
+    fn list_prunes_entries_with_dead_pid() {
+        let dir = TempDir::new().unwrap();
+        let store = StateStore::new(dir.path().into());
+
+        let mut alive = sample_entry("alive");
+        alive.pid = Some(std::process::id());
+        store.write("session-alive", &alive).unwrap();
+
+        let mut dead = sample_entry("dead");
+        dead.pid = Some(1_000_000_000);
+        store.write("session-dead", &dead).unwrap();
+
+        let listed = store.list().unwrap();
+        assert_eq!(listed.len(), 1, "should keep only the alive entry");
+        assert_eq!(listed[0].0, "session-alive");
+
+        assert!(!dir.path().join("session-dead").exists());
+    }
+
+    #[test]
+    fn list_keeps_entries_without_pid() {
+        let dir = TempDir::new().unwrap();
+        let store = StateStore::new(dir.path().into());
+        let no_pid_entry = sample_entry("legacy");
+        store.write("session-legacy", &no_pid_entry).unwrap();
+
+        let listed = store.list().unwrap();
+        assert_eq!(listed.len(), 1);
     }
 }
