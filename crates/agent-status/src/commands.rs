@@ -503,16 +503,14 @@ mod tests {
 
     #[test]
     fn format_status_ignores_working_entries() {
-        let mut e = entry("alpha", "%1", "working");
-        e.event = "working".into();
+        let e = entry("alpha", "%1", "working");
         // A working-only entry should produce no indicator at all.
         assert_eq!(format_status(&[("s1".into(), e)]), None);
     }
 
     #[test]
     fn format_status_counts_only_non_working_entries() {
-        let mut working = entry("alpha", "%1", "working");
-        working.event = "working".into();
+        let working = entry("alpha", "%1", "working");
         let waiting = entry("beta", "%2", "notify");
         let entries = vec![
             ("s1".into(), working),
@@ -524,8 +522,7 @@ mod tests {
 
     #[test]
     fn format_list_ignores_working_entries() {
-        let mut working = entry("alpha", "%1", "working");
-        working.event = "working".into();
+        let working = entry("alpha", "%1", "working");
         let waiting = entry("beta", "%2", "notify");
         let out = format_list(&[
             ("s1".into(), working),
