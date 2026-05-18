@@ -143,8 +143,12 @@ fn run_clear(store: &StateStore, agent_name: &str) -> io::Result<()> {
     let Some(session_id) = agent.extract_session_id(&buf) else {
         return Ok(());
     };
-    store.remove(&session_id)?;
-    refresh_tmux();
+    // Only refresh tmux when we actually removed something. `PreToolUse` fires
+    // on every tool call; the typical case is "no state file present, this is
+    // a no-op clear" and we shouldn't redraw the status bar for that.
+    if store.remove(&session_id)? {
+        refresh_tmux();
+    }
     Ok(())
 }
 
