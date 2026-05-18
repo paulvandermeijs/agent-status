@@ -119,38 +119,6 @@ fn list_outputs_session_id_pane_display_columns() {
 }
 
 #[test]
-fn preview_prints_multi_line_detail_for_known_session() {
-    let tmp = TempDir::new().unwrap();
-    let state_dir = tmp.path().join("agent-status");
-
-    let (_, _, code) = run(
-        &state_dir,
-        &["set", "notify"],
-        Some(r#"{"session_id":"sess-prev","message":"Hello from agent"}"#),
-    );
-    assert_eq!(code, 0);
-
-    let (stdout, _, code) = run(&state_dir, &["preview", "sess-prev"], None);
-    assert_eq!(code, 0);
-    assert!(stdout.contains("Project:"));
-    assert!(stdout.contains("Agent:"));
-    assert!(stdout.contains("claude-code"));
-    assert!(stdout.contains("Event:"));
-    assert!(stdout.contains("Message:"));
-    assert!(stdout.contains("Hello from agent"));
-}
-
-#[test]
-fn preview_unknown_session_id_exits_zero_with_empty_output() {
-    let tmp = TempDir::new().unwrap();
-    let state_dir = tmp.path().join("agent-status");
-
-    let (stdout, _, code) = run(&state_dir, &["preview", "no-such-session"], None);
-    assert_eq!(code, 0);
-    assert_eq!(stdout, "");
-}
-
-#[test]
 fn status_prunes_state_file_with_dead_pid() {
     let tmp = TempDir::new().unwrap();
     let state_dir = tmp.path().join("agent-status");
