@@ -157,7 +157,7 @@ The `pid` field records the agent process's PID (typically the claude / opencode
 ## Development
 
 ```sh
-cargo test                                                   # 83 tests (76 unit + 7 integration)
+cargo test                                                   # 84 tests (76 unit + 8 integration)
 cargo clippy --all-targets --all-features --locked -- -D warnings
 cargo build --release                                        # ~500 KB stripped binary
 ```
