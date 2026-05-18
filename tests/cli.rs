@@ -306,3 +306,31 @@ fn agent_extension_pi_coding_agent_writes_ts_file() {
     assert!(contents.contains("export default function"));
     assert!(contents.contains("pi.on(\"agent_end\""));
 }
+
+#[test]
+fn agent_extension_opencode_writes_ts_file() {
+    let tmp = TempDir::new().unwrap();
+    let state_dir = tmp.path().join("agent-status");
+
+    let (stdout, stderr, code) = run(
+        &state_dir,
+        &["agent-extension", "--agent", "opencode"],
+        None,
+    );
+    assert_eq!(code, 0, "stderr: {stderr}");
+
+    let printed_path = stdout.trim_end_matches('\n');
+    let expected = state_dir.join("extensions").join("opencode.ts");
+    assert_eq!(printed_path, expected.to_string_lossy());
+
+    let contents = std::fs::read_to_string(&expected).expect("extension file written");
+    assert!(
+        contents.contains(r#"const BIN = ""#),
+        "expected substituted BIN, got:\n{contents}",
+    );
+    assert!(
+        !contents.contains("process.env.AGENT_STATUS_BIN ??"),
+        "env-fallback should have been replaced",
+    );
+    assert!(contents.contains("AgentStatusPlugin"));
+}
