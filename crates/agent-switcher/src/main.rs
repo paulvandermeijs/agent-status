@@ -1,5 +1,7 @@
 //! Tmux popup TUI for switching between waiting AI coding agent sessions.
 
+mod filter;
+
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
