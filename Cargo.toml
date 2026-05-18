@@ -1,20 +1,18 @@
-[package]
-name = "agent-status"
-version = "0.2.0"
+[workspace]
+resolver = "2"
+members = ["crates/agent-status"]
+
+[workspace.package]
+version = "0.3.0"
 edition = "2021"
-description = "Tmux-integrated indicator showing which AI coding agent sessions are waiting on user input."
 
-[[bin]]
-name = "agent-status"
-path = "src/main.rs"
+[workspace.lints.rust]
+unsafe_code = "forbid"
+nonstandard_style = { level = "deny", priority = -1 }
 
-[dependencies]
-clap = { version = "4", features = ["derive"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-
-[dev-dependencies]
-tempfile = "3"
+[workspace.lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
 
 [profile.release]
 opt-level = "s"
@@ -22,11 +20,3 @@ lto = true
 codegen-units = 1
 strip = true
 panic = "abort"
-
-[lints.rust]
-unsafe_code = "forbid"
-nonstandard_style = { level = "deny", priority = -1 }
-
-[lints.clippy]
-all = { level = "deny", priority = -1 }
-pedantic = { level = "warn", priority = -1 }
