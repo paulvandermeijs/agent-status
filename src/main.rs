@@ -112,8 +112,7 @@ fn run_set(store: &StateStore, agent_name: &str, event: &str) -> io::Result<()> 
     let pane = std::env::var("TMUX_PANE").unwrap_or_default();
     let ts = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
+        .map_or(0, |d| d.as_secs());
 
     let message = agent.extract_message(&buf);
     let entry = build_entry(agent.name(), event, &cwd, &pane, ts, message.as_deref());
@@ -161,8 +160,7 @@ fn run_preview(store: &StateStore, session_id: &str, out: &mut impl Write) -> io
     };
     let now_ts = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
+        .map_or(0, |d| d.as_secs());
     write!(out, "{}", format_preview(&entry, now_ts))?;
     Ok(())
 }
