@@ -31,9 +31,21 @@ install -m 0755 target/release/agent-status ~/.claude/bin/agent-status
 
 ## Configure
 
-### Claude Code hooks (`~/.claude/settings.json`)
+### Claude Code
 
-Merge the following into the top-level `hooks` block:
+Drop this alias into your shell rc (`.zshrc`, `.bashrc`, etc.):
+
+```sh
+alias claude='claude --settings "$(agent-status agent-settings)"'
+```
+
+That's it. Each time you run `claude`, the alias expands so claude launches with `--settings <generated.json>` — a six-hook file that `agent-status` regenerates on every invocation from its own absolute path. Claude Code merges `--settings` on top of your user/project settings, so nothing you've already configured gets overwritten.
+
+The generated file lives at `${XDG_RUNTIME_DIR:-/tmp}/agent-status/settings/claude-code.json` and is rewritten every run — no cleanup, no env vars, no PATH manipulation.
+
+#### Wiring the hooks manually (fallback)
+
+If you'd rather see the hooks in your settings file, skip the alias and merge this into the top-level `hooks` block of `~/.claude/settings.json` instead:
 
 ```json
 {
@@ -48,30 +60,9 @@ Merge the following into the top-level `hooks` block:
 }
 ```
 
-The `PreToolUse` hook fires before every tool call Claude makes. The hook issues a `clear` — which is idempotent — so the agent-status indicator correctly transitions out of "Needs Input" the moment Claude resumes work after you grant a permission, instead of staying "Needs Input" until the next `Stop` fires (which may be many tool calls later). The `PreToolUse` hook fires often, but `clear` skips refreshing tmux when there's nothing to remove, so the steady-state cost is one filesystem stat per tool call.
+Pick one route, not both. If you have manual hooks AND the alias, each event fires twice — idempotent for `clear` but wasteful for `set`.
 
-### Claude Code alias (optional, zero-config)
-
-If you'd rather not edit `~/.claude/settings.json` by hand, drop this alias
-into your shell rc (`.zshrc`, `.bashrc`, etc.):
-
-```sh
-alias claude='claude --settings "$(agent-status agent-settings)"'
-```
-
-The alias expands every time you run `claude`: `agent-status agent-settings`
-writes a fresh settings JSON wiring the six hooks to its own absolute path
-(found via `current_exe()`) and prints the file's path on stdout. Claude
-Code then merges `--settings <file>` on top of your user/project settings,
-so the alias adds the agent-status hooks without overwriting anything else
-you've configured.
-
-The generated file lives at
-`${XDG_RUNTIME_DIR:-/tmp}/agent-status/settings/claude-code.json` and is
-overwritten on each invocation — no cleanup needed. If you have agent-status
-hooks already wired in `~/.claude/settings.json`, remove them before adding
-the alias, otherwise each event fires twice (idempotent for `clear`, just
-wasteful for `set`).
+The `PreToolUse` hook fires before every tool call Claude makes. The hook issues a `clear` — which is idempotent — so the agent-status indicator transitions out of "Needs Input" the moment Claude resumes work after you grant a permission, instead of staying "Needs Input" until the next `Stop` fires (which may be many tool calls later). The `PreToolUse` hook fires often, but `clear` skips refreshing tmux when there's nothing to remove, so the steady-state cost is one filesystem stat per tool call.
 
 ### pi (`~/.pi/agent/extensions/`)
 
