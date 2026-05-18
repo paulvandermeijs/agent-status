@@ -149,3 +149,22 @@ fn preview_unknown_session_id_exits_zero_with_empty_output() {
     assert_eq!(code, 0);
     assert_eq!(stdout, "");
 }
+
+#[test]
+fn status_prunes_state_file_with_dead_pid() {
+    let tmp = TempDir::new().unwrap();
+    let state_dir = tmp.path().join("agent-status");
+    std::fs::create_dir_all(&state_dir).unwrap();
+
+    let json = r#"{"agent":"claude-code","project":"ghost","cwd":"/x","event":"notify","tmux_pane":"","ts":1,"pid":1000000000}"#;
+    std::fs::write(state_dir.join("ghost-session"), json).unwrap();
+    assert!(state_dir.join("ghost-session").exists());
+
+    let (stdout, _, code) = run(&state_dir, &["status"], None);
+    assert_eq!(code, 0);
+    assert_eq!(stdout, "", "status should report no waiting sessions");
+    assert!(
+        !state_dir.join("ghost-session").exists(),
+        "stale state file should have been pruned by the status read",
+    );
+}
