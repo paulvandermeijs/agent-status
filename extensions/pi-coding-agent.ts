@@ -24,8 +24,7 @@ export default function (pi: ExtensionAPI) {
   );
 }
 
-const BIN =
-  process.env.AGENT_STATUS_BIN ?? `${process.env.HOME}/.claude/bin/agent-status`;
+const BIN = process.env.AGENT_STATUS_BIN ?? `${process.env.HOME}/.claude/bin/agent-status`;
 
 type Action = "set" | "clear";
 type SetEvent = "notify" | "done";
