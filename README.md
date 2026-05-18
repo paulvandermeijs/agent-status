@@ -28,7 +28,7 @@ install -m 0755 target/release/agent-status   ~/.claude/bin/agent-status
 install -m 0755 target/release/agent-switcher ~/.claude/bin/agent-switcher
 ```
 
-`~/.claude/bin` is one option; any directory works as long as the absolute path matches what you put in the hook commands and tmux config below. Both binaries are around 500 KB combined and have no runtime dependencies (tmux is invoked best-effort to refresh the status bar and switch panes; if it isn't running, the failure is silenced).
+`~/.claude/bin` is one option; any directory works as long as the absolute path matches what you put in the hook commands and tmux config below. Each binary is around 550 KB stripped (≈1.1 MB combined) and has no runtime dependencies (tmux is invoked best-effort to refresh the status bar and switch panes; if it isn't running, the failure is silenced).
 
 ## Configure
 
