@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build / test / lint
 
 ```sh
-cargo test                                                            # 95 tests (83 unit + 12 integration)
+cargo test                                                            # 100 tests (87 unit + 13 integration)
 cargo clippy --all-targets --all-features --locked -- -D warnings     # required gate
 cargo build --release                                                 # ~500 KB stripped binary
 ```
@@ -48,7 +48,7 @@ No changes to `state.rs`, `commands.rs`, or `main.rs` should be needed for a typ
 
 Some agents (e.g. pi at `pi.dev`) don't have a shell-hook mechanism — their lifecycle events fire in-process inside the agent's runtime. For those, the Rust `Agent` impl is unchanged (it still reads JSON from stdin), but the integration ships an additional bridge file that runs inside the agent and shells out to `agent-status`. See `extensions/pi-coding-agent.ts` and the pi section of `README.md`. The `Agent::extract_session_id` contract still applies — the bridge constructs the JSON payload, so we control the field name.
 
-Agents that accept a `--settings <file>` flag (currently only Claude Code) can be installed via a shell alias instead of manual settings.json editing: `alias claude='claude --settings "$(agent-status agent-settings)"'`. The `agent-settings` subcommand calls `build_settings_json` in `commands.rs` (pure JSON construction using `serde_json::json!`) and writes the result to `${XDG_RUNTIME_DIR:-/tmp}/agent-status/settings/<agent>.json` using `current_exe()` for the binary path. To wire a new agent here, extend `build_settings_json` to match on the agent name and return the agent's hook JSON.
+Agents that accept a per-launch file-argument (Claude Code's `--settings <file>`, pi's `-e <file>`) can be installed via a shell alias — `alias claude='claude --settings "$(agent-status agent-extension)"'`, `alias pi='pi -e "$(agent-status agent-extension --agent pi-coding-agent)"'`. The `agent-extension` subcommand calls `build_extension` in `commands.rs`, which returns `Option<ExtensionFile { filename, content }>`. Each branch in `build_extension`'s match picks the right filename extension (`.json` / `.ts`) and the right content shape: Claude Code's JSON via `serde_json::json!`, the TypeScript bridges via `include_str!` from `extensions/<agent>.ts` plus a one-line substitution of the `BIN` constant. opencode's plugin loader is directory-based with no per-launch flag, so it's a `cp` install rather than an alias — same `build_extension` path. To wire a new alias-friendly agent, add a branch to `build_extension`; for TypeScript bridges, point at the corresponding `.ts` file under `extensions/` and rely on `TS_BIN_RESOLUTION_LINE` for the substitution.
 
 ## Wire compatibility
 
