@@ -8,32 +8,53 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Build / test / lint
 
+This repo is a Cargo workspace. The binaries live in `crates/agent-status` (the
+hook-facing CLI, also exposes a library) and `crates/agent-switcher` (the
+ratatui TUI popup).
+
 ```sh
-cargo test                                                            # 100 tests (87 unit + 13 integration)
+cargo test                                                            # workspace-wide
 cargo clippy --all-targets --all-features --locked -- -D warnings     # required gate
-cargo build --release                                                 # ~500 KB stripped binary
+cargo build --release                                                 # both binaries
 ```
 
 Run a single unit test or a specific integration test:
 
 ```sh
-cargo test entry_roundtrips_through_json
-cargo test --test cli end_to_end_set_status_clear
+cargo test -p agent-status entry_roundtrips_through_json
+cargo test -p agent-status --test cli end_to_end_set_status_clear
+cargo test -p agent-switcher filter_matches_project_substring
 ```
 
-The crate has `[lints.rust]` (`unsafe_code = "forbid"`, `nonstandard_style = "deny"`) and `[lints.clippy]` (`all = "deny"`, `pedantic = "warn"`) in Cargo.toml — clippy must pass with `-D warnings`.
+Workspace-level `[workspace.lints]` enforce `unsafe_code = "forbid"`,
+`nonstandard_style = "deny"`, `clippy::all = "deny"`, `clippy::pedantic = "warn"`
+across both crates.
 
 ## Module split (load-bearing)
 
-Three files with a deliberate division of labor — preserve it when adding logic:
+`agent-status` is split into a library and a binary in the same crate:
 
-- `src/state.rs` — owns all filesystem I/O. `AttentionEntry` (the on-disk struct) and `StateStore` (read/write/list state files). Tests use `tempfile::TempDir` for isolation.
-- `src/commands.rs` — purely pure helpers (`build_entry`, `format_status`, `format_list`). No `std::env`, `std::io`, `std::time`, or `std::fs` imports — that's what makes the bulk of the logic unit-testable.
-- `src/main.rs` — the impure adapter. clap `Parser`/`Subcommand` derives plus `run_*` glue functions that read stdin/env/time and call into the pure helpers.
-- `src/agents/mod.rs` — defines the `Agent` trait (`name()` + `extract_session_id()`) and the `by_name` registry that resolves the `--agent` flag to a concrete impl.
-- `src/agents/claude_code.rs` — `ClaudeCodeAgent` implementing `Agent` for Claude Code hook payloads.
+- `crates/agent-status/src/state.rs` — owns all filesystem I/O. `AttentionEntry`
+  and `StateStore`. Tests use `tempfile::TempDir` for isolation.
+- `crates/agent-status/src/commands.rs` — pure helpers (`build_entry`,
+  `format_status`, `format_list`, `build_extension`). No `std::env`,
+  `std::io`, `std::time`, or `std::fs` imports.
+- `crates/agent-status/src/main.rs` — clap glue, impure adapter; imports from
+  the library via `agent_status::…`.
+- `crates/agent-status/src/lib.rs` — module declarations + crate-root
+  re-exports (`AttentionEntry`, `StateStore`, `Agent`, etc.) consumed by
+  `agent-switcher`.
+- `crates/agent-status/src/agents/…` — per-agent JSON parsing.
 
-When adding logic, decide first whether it can live in `commands.rs` (pure → easy unit test) or has to be in `state.rs`/`main.rs` (impure → integration test territory).
+`agent-switcher` is binary-only:
+
+- `crates/agent-switcher/src/main.rs` — terminal setup + crossterm event loop.
+- `crates/agent-switcher/src/app.rs` — `App` state and key-event reducer.
+- `crates/agent-switcher/src/ui.rs` — ratatui rendering (pure, takes `&App`).
+- `crates/agent-switcher/src/filter.rs` — pure filter/match logic.
+
+Both share the `agent-status` library, which is the only crate that depends on
+serde/clap/serde_json.
 
 ## Adding a new agent
 
@@ -58,12 +79,22 @@ The `agent` field was added in the v0.2.0 refactor. It is non-optional in the cu
 
 The `pid` field was added later still and is also optional in the schema for the same reason — entries written by older binaries simply skip the PID-based auto-prune (`is_pid_alive` is only consulted when `pid` is `Some`).
 
+The `event` field accepts a third value `"working"` in addition to `"notify"`
+and `"done"`. The Claude Code extension's `UserPromptSubmit` and `PreToolUse`
+hooks emit `set working` so an in-flight session is recorded in the state
+directory. `format_status` and `format_list` filter `working` entries out, so
+the tmux indicator and the `list` TSV output are unchanged. `agent-switcher`
+is the only consumer that surfaces working entries (with a spinner). pi and
+opencode do not yet emit `working`; their hook semantics are unchanged.
+
 ## Dev / installed binary divergence
 
 Claude Code hooks and tmux's `status-right` invoke the binary at `~/.claude/bin/agent-status`, NOT the freshly compiled `target/release/agent-status` in this checkout. To exercise source changes against the real hook flow, reinstall:
 
 ```sh
-cargo build --release && install -m 0755 target/release/agent-status ~/.claude/bin/agent-status
+cargo build --release
+install -m 0755 target/release/agent-status   ~/.claude/bin/agent-status
+install -m 0755 target/release/agent-switcher ~/.claude/bin/agent-switcher
 ```
 
 `cargo test` always builds a fresh test binary (via `CARGO_BIN_EXE_agent-status`), so the test suite is unaffected by what's installed.
