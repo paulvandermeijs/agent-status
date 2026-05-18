@@ -143,7 +143,7 @@ agent-status preview <SESSION_ID>         # multi-line detail for one session (u
 `${XDG_RUNTIME_DIR:-/tmp}/agent-status/<session_id>` — one file per active session. Inspectable with `ls`/`cat`. Format:
 
 ```json
-{"agent":"claude-code","project":"agent-status","cwd":"/path/to/project","event":"notify","tmux_pane":"%17","ts":1778163565,"message":"Permission required"}
+{"agent":"claude-code","project":"agent-status","cwd":"/path/to/project","event":"notify","tmux_pane":"%17","ts":1778163565,"message":"Permission required","pid":12345}
 ```
 
 The `message` field is optional and only present when the agent's hook payload
@@ -152,10 +152,12 @@ before this field existed still load — `message` defaults to absent.
 
 The `agent` field is `"claude-code"`, `"opencode"`, or `"pi-coding-agent"`; new agents use their own lowercase-hyphenated name.
 
+The `pid` field records the agent process's PID (typically the claude / opencode / pi binary) so `agent-status status`, `list`, and `preview` can detect and remove entries whose owning process has died without firing its session-end hook. Files written by older binaries or the bash precursor — which lack `pid` — are never auto-pruned; they age out only on tmpfs cleanup. Such entries should disappear naturally after one `set`/`clear` cycle on the affected session.
+
 ## Development
 
 ```sh
-cargo test                                                   # 72 tests (66 unit + 6 integration)
+cargo test                                                   # 83 tests (76 unit + 7 integration)
 cargo clippy --all-targets --all-features --locked -- -D warnings
 cargo build --release                                        # ~500 KB stripped binary
 ```
@@ -164,7 +166,6 @@ cargo build --release                                        # ~500 KB stripped 
 
 - **The `Stop` hook fires on every turn end**, so any session that just finished a response shows up as "waiting" until you send the next prompt. Intentional — the whole point is to know which session needs you while you're heads-down elsewhere. Drop the `Stop` line from `settings.json` if it proves too eager.
 - **opencode has no "user submitted a prompt" event**, so once `session.idle` marks an opencode session `done`, the indicator stays on `done` while you type the next prompt and only refreshes its timestamp on the next idle. Same intent as the `Stop` caveat above — the session *is* the one waiting on you.
-- **Stale state on abnormal exit.** If a Claude Code process dies without firing its session-end hook, its state file lingers. macOS's tmpwatch and reboots eventually clean `/tmp`; on Linux with `XDG_RUNTIME_DIR`, files vanish at logout.
 - **Architecture-specific binary.** The compiled binary is platform-locked. On a new machine, rebuild from source.
 
 [hooks]: https://docs.claude.com/en/docs/claude-code/hooks

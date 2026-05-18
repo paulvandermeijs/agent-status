@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build / test / lint
 
 ```sh
-cargo test                                                            # 72 tests (66 unit + 6 integration)
+cargo test                                                            # 83 tests (76 unit + 7 integration)
 cargo clippy --all-targets --all-features --locked -- -D warnings     # required gate
 cargo build --release                                                 # ~500 KB stripped binary
 ```
@@ -53,6 +53,8 @@ Some agents (e.g. pi at `pi.dev`) don't have a shell-hook mechanism — their li
 `AttentionEntry`'s original five field names (`project`, `cwd`, `event`, `tmux_pane`, `ts`) match the bash precursor of this tool; mixed-version setups must not break. The test `entry_matches_bash_plan_field_names` in `state.rs` is the guard — don't rename fields without updating it deliberately.
 
 The `agent` field was added in the v0.2.0 refactor. It is non-optional in the current schema, so old state files from the bash precursor or pre-v0.2.0 binary (which lack `agent`) will fail to deserialize on the next `list` and be silently skipped. This is acceptable: stale entries are cleaned up naturally on the first `set`/`clear` of each session after upgrading.
+
+The `pid` field was added later still and is also optional in the schema for the same reason — entries written by older binaries simply skip the PID-based auto-prune (`is_pid_alive` is only consulted when `pid` is `Some`).
 
 ## Dev / installed binary divergence
 
