@@ -29,6 +29,10 @@ pub fn build_extension(bin_path: &str, agent_name: &str) -> Option<ExtensionFile
             filename: "pi-coding-agent.ts".to_string(),
             content: build_pi_extension(bin_path),
         }),
+        "opencode" => Some(ExtensionFile {
+            filename: "opencode.ts".to_string(),
+            content: build_opencode_extension(bin_path),
+        }),
         _ => None,
     }
 }
@@ -62,6 +66,13 @@ const TS_BIN_RESOLUTION_LINE: &str =
 
 fn build_pi_extension(bin_path: &str) -> String {
     let template = include_str!("../extensions/pi-coding-agent.ts");
+    let serialized = serde_json::to_string(bin_path).expect("path serializes");
+    let replacement = format!("const BIN = {serialized};");
+    template.replacen(TS_BIN_RESOLUTION_LINE, &replacement, 1)
+}
+
+fn build_opencode_extension(bin_path: &str) -> String {
+    let template = include_str!("../extensions/opencode.ts");
     let serialized = serde_json::to_string(bin_path).expect("path serializes");
     let replacement = format!("const BIN = {serialized};");
     template.replacen(TS_BIN_RESOLUTION_LINE, &replacement, 1)
@@ -547,6 +558,34 @@ mod tests {
     #[test]
     fn build_extension_pi_extension_json_escapes_bin_path() {
         let ext = build_extension(r#"/x/has"quote\and-backslash/agent-status"#, "pi-coding-agent")
+            .unwrap();
+        assert!(
+            ext.content.contains(r#"const BIN = "/x/has\"quote\\and-backslash/agent-status";"#),
+            "BIN line not escaped correctly; got:\n{}",
+            ext.content,
+        );
+    }
+
+    #[test]
+    fn build_extension_returns_opencode_extension() {
+        let ext = build_extension("/abs/path/agent-status", "opencode")
+            .expect("opencode is supported");
+        assert_eq!(ext.filename, "opencode.ts");
+        assert!(
+            ext.content.contains(r#"const BIN = "/abs/path/agent-status";"#),
+            "missing substituted BIN; got:\n{}",
+            ext.content,
+        );
+        assert!(
+            !ext.content.contains("process.env.AGENT_STATUS_BIN ??"),
+            "env-fallback line should have been replaced",
+        );
+        assert!(ext.content.contains("AgentStatusPlugin"));
+    }
+
+    #[test]
+    fn build_extension_opencode_extension_json_escapes_bin_path() {
+        let ext = build_extension(r#"/x/has"quote\and-backslash/agent-status"#, "opencode")
             .unwrap();
         assert!(
             ext.content.contains(r#"const BIN = "/x/has\"quote\\and-backslash/agent-status";"#),
