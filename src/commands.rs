@@ -25,6 +25,10 @@ pub fn build_extension(bin_path: &str, agent_name: &str) -> Option<ExtensionFile
             filename: "claude-code.json".to_string(),
             content: build_claude_code_settings(bin_path),
         }),
+        "pi-coding-agent" => Some(ExtensionFile {
+            filename: "pi-coding-agent.ts".to_string(),
+            content: build_pi_extension(bin_path),
+        }),
         _ => None,
     }
 }
@@ -45,6 +49,22 @@ fn build_claude_code_settings(bin_path: &str) -> String {
         }
     });
     serde_json::to_string_pretty(&value).expect("serde_json::Value always serializes")
+}
+
+/// The exact BIN-resolution line shared by `extensions/pi-coding-agent.ts`
+/// and `extensions/opencode.ts`. Matched verbatim by `str::replacen` so the
+/// embedded template can be specialized with an absolute path. If this line
+/// drifts in the .ts source, the substitution silently no-ops and the file
+/// keeps its env-fallback resolution at runtime — still functional, just
+/// not alias-optimized.
+const TS_BIN_RESOLUTION_LINE: &str =
+    "const BIN = process.env.AGENT_STATUS_BIN ?? `${process.env.HOME}/.claude/bin/agent-status`;";
+
+fn build_pi_extension(bin_path: &str) -> String {
+    let template = include_str!("../extensions/pi-coding-agent.ts");
+    let serialized = serde_json::to_string(bin_path).expect("path serializes");
+    let replacement = format!("const BIN = {serialized};");
+    template.replacen(TS_BIN_RESOLUTION_LINE, &replacement, 1)
 }
 
 /// Construct an [`AttentionEntry`] from raw inputs.
@@ -505,5 +525,33 @@ mod tests {
             .and_then(serde_json::Value::as_str)
             .expect("notification command string");
         assert!(command.contains(r#"has"quote\and-backslash"#), "got: {command}");
+    }
+
+    #[test]
+    fn build_extension_returns_pi_coding_agent_extension() {
+        let ext = build_extension("/abs/path/agent-status", "pi-coding-agent")
+            .expect("pi-coding-agent is supported");
+        assert_eq!(ext.filename, "pi-coding-agent.ts");
+        assert!(
+            ext.content.contains(r#"const BIN = "/abs/path/agent-status";"#),
+            "missing substituted BIN; got:\n{}",
+            ext.content,
+        );
+        assert!(
+            !ext.content.contains("process.env.AGENT_STATUS_BIN ??"),
+            "env-fallback line should have been replaced",
+        );
+        assert!(ext.content.contains("export default function"));
+    }
+
+    #[test]
+    fn build_extension_pi_extension_json_escapes_bin_path() {
+        let ext = build_extension(r#"/x/has"quote\and-backslash/agent-status"#, "pi-coding-agent")
+            .unwrap();
+        assert!(
+            ext.content.contains(r#"const BIN = "/x/has\"quote\\and-backslash/agent-status";"#),
+            "BIN line not escaped correctly; got:\n{}",
+            ext.content,
+        );
     }
 }
