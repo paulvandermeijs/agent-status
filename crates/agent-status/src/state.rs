@@ -47,6 +47,7 @@ impl StateStore {
     /// Construct a store backed by `dir`.
     ///
     /// The directory does not need to exist yet — [`write`](Self::write) creates it on demand.
+    #[must_use]
     pub fn new(dir: PathBuf) -> Self {
         Self { dir }
     }
@@ -60,6 +61,7 @@ impl StateStore {
 
     /// Path of the state directory.
     #[cfg(test)]
+    #[must_use]
     pub fn dir(&self) -> &std::path::Path {
         &self.dir
     }

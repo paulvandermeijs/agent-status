@@ -19,6 +19,7 @@ pub struct ExtensionFile {
 /// once); returns `None` for any other agent name. The `filename` member is
 /// the basename to write as (`claude-code.json`, `pi-coding-agent.ts`,
 /// `opencode.ts`); the `content` member is the file body.
+#[must_use]
 pub fn build_extension(bin_path: &str, agent_name: &str) -> Option<ExtensionFile> {
     match agent_name {
         "claude-code" => Some(ExtensionFile {
@@ -112,6 +113,7 @@ pub fn build_entry(
 /// Returns `None` when there are no entries so the caller can omit the line entirely.
 /// One entry shows the project name; multiple entries show a count. The output is
 /// plain text — styling is left to the tmux config so users can pick their own colors.
+#[must_use]
 pub fn format_status(entries: &[(String, AttentionEntry)]) -> Option<String> {
     match entries.len() {
         0 => None,
@@ -127,6 +129,7 @@ pub fn format_status(entries: &[(String, AttentionEntry)]) -> Option<String> {
 /// string safe for fzf's `--with-nth=3`: a `[!]`/`[*]` marker (so fzf cannot fuzzy-match
 /// the raw event word `notify`/`done`), then the project and agent names padded to the
 /// max width in this list, then a one-line snippet of the agent's message if any.
+#[must_use]
 pub fn format_list(entries: &[(String, AttentionEntry)]) -> String {
     const PROJECT_CAP: usize = 30;
     const AGENT_CAP: usize = 16;
@@ -180,6 +183,7 @@ pub fn format_list(entries: &[(String, AttentionEntry)]) -> String {
 /// The output is plain ASCII: a label-aligned key/value block, optionally followed by
 /// a `Message:` section when `entry.message` is `Some`. The `Message:` body preserves
 /// embedded newlines verbatim so multi-line agent responses read naturally.
+#[must_use]
 pub fn format_preview(entry: &AttentionEntry, now_ts: u64) -> String {
     use std::fmt::Write as _;
     let age = now_ts.saturating_sub(entry.ts);

@@ -7,6 +7,9 @@ description = "Tmux-integrated indicator showing which AI coding agent sessions 
 [lints]
 workspace = true
 
+[lib]
+path = "src/lib.rs"
+
 [[bin]]
 name = "agent-status"
 path = "src/main.rs"

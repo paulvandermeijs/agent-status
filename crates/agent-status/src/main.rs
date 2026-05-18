@@ -1,15 +1,12 @@
-mod agents;
-mod commands;
-mod state;
-
 use std::io::{self, Read, Write};
 use std::process::ExitCode;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use clap::{Parser, Subcommand};
 
-use commands::{build_entry, build_extension, format_list, format_preview, format_status};
-use state::StateStore;
+use agent_status::commands::{build_entry, build_extension, format_list, format_preview, format_status};
+use agent_status::state::StateStore;
+use agent_status::agents;
 
 /// Tmux-integrated indicator showing which AI coding agent sessions are waiting on user input.
 ///

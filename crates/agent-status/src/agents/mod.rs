@@ -23,6 +23,7 @@ pub trait Agent {
 }
 
 /// Resolve an agent by its `--agent` flag value.
+#[must_use]
 pub fn by_name(name: &str) -> Option<Box<dyn Agent>> {
     match name {
         "claude-code" => Some(Box::new(claude_code::ClaudeCodeAgent)),
