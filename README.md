@@ -50,40 +50,28 @@ Merge the following into the top-level `hooks` block:
 
 The `PreToolUse` hook fires before every tool call Claude makes. The hook issues a `clear` — which is idempotent — so the agent-status indicator correctly transitions out of "Needs Input" the moment Claude resumes work after you grant a permission, instead of staying "Needs Input" until the next `Stop` fires (which may be many tool calls later). The `PreToolUse` hook fires often, but `clear` skips refreshing tmux when there's nothing to remove, so the steady-state cost is one filesystem stat per tool call.
 
-### Claude Code wrapper (optional, zero-config)
+### Claude Code alias (optional, zero-config)
 
-If you'd rather not edit `~/.claude/settings.json` by hand, you can install the
-wrapper at `extensions/claude-wrapper.sh` as `claude` at the front of your
-`$PATH`. The wrapper finds the real `claude` binary, generates a temporary
-settings file with the agent-status hooks pre-wired, and runs claude
-with `--settings <tmp>` prepended to your args. No settings.json edits required.
+If you'd rather not edit `~/.claude/settings.json` by hand, drop this alias
+into your shell rc (`.zshrc`, `.bashrc`, etc.):
 
 ```sh
-mkdir -p ~/.claude/bin
-cp extensions/claude-wrapper.sh ~/.claude/bin/claude
-chmod +x ~/.claude/bin/claude
-# Ensure ~/.claude/bin is at the FRONT of your $PATH.
+alias claude='claude --settings "$(agent-status agent-settings)"'
 ```
 
-The wrapper is **passthrough by default outside tmux** (it gates on `TMUX_PANE`)
-so leaving it installed everywhere is safe — only sessions launched from a
-tmux pane get the hook injection. Other gates:
+The alias expands every time you run `claude`: `agent-status agent-settings`
+writes a fresh settings JSON wiring the six hooks to its own absolute path
+(found via `current_exe()`) and prints the file's path on stdout. Claude
+Code then merges `--settings <file>` on top of your user/project settings,
+so the alias adds the agent-status hooks without overwriting anything else
+you've configured.
 
-| Env var | Effect |
-|---|---|
-| `AGENT_STATUS_CLAUDE_WRAPPER_DISABLED=1` | Disable the wrapper for this invocation (full passthrough). |
-| `AGENT_STATUS_CLAUDE_WRAPPER_FORCE=1` | Activate even outside tmux. |
-| `AGENT_STATUS_BIN` | Override the path to the `agent-status` binary the wrapper bakes into the generated settings. Default: `~/.claude/bin/agent-status`. |
-
-The wrapper merges with any hooks already in your `~/.claude/settings.json`
-(Claude Code merges `--settings` files on top of user/project settings). If
-you have your own agent-status hooks wired there already, remove them
-before installing the wrapper — otherwise each event fires twice (idempotent
-for `clear`, harmless-but-wasteful for `set`).
-
-If `agent-status` itself isn't installed at `$AGENT_STATUS_BIN`, the wrapper
-detects this and silently falls through to the real claude — useful for
-shared dotfiles where not every host has agent-status built.
+The generated file lives at
+`${XDG_RUNTIME_DIR:-/tmp}/agent-status/settings/claude-code.json` and is
+overwritten on each invocation — no cleanup needed. If you have agent-status
+hooks already wired in `~/.claude/settings.json`, remove them before adding
+the alias, otherwise each event fires twice (idempotent for `clear`, just
+wasteful for `set`).
 
 ### pi (`~/.pi/agent/extensions/`)
 
@@ -195,7 +183,7 @@ The `pid` field records the agent process's PID (typically the claude / opencode
 ## Development
 
 ```sh
-cargo test                                                   # 87 tests (78 unit + 9 integration)
+cargo test                                                   # 95 tests (83 unit + 12 integration)
 cargo clippy --all-targets --all-features --locked -- -D warnings
 cargo build --release                                        # ~500 KB stripped binary
 ```

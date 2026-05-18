@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build / test / lint
 
 ```sh
-cargo test                                                            # 87 tests (78 unit + 9 integration)
+cargo test                                                            # 95 tests (83 unit + 12 integration)
 cargo clippy --all-targets --all-features --locked -- -D warnings     # required gate
 cargo build --release                                                 # ~500 KB stripped binary
 ```
@@ -48,7 +48,7 @@ No changes to `state.rs`, `commands.rs`, or `main.rs` should be needed for a typ
 
 Some agents (e.g. pi at `pi.dev`) don't have a shell-hook mechanism — their lifecycle events fire in-process inside the agent's runtime. For those, the Rust `Agent` impl is unchanged (it still reads JSON from stdin), but the integration ships an additional bridge file that runs inside the agent and shells out to `agent-status`. See `extensions/pi-coding-agent.ts` and the pi section of `README.md`. The `Agent::extract_session_id` contract still applies — the bridge constructs the JSON payload, so we control the field name.
 
-A third pattern is a PATH-shadowing wrapper that auto-injects the hook configuration so the user doesn't have to touch the agent's settings file at all. The wrapper lives in `extensions/<agent>-wrapper.sh`, gates on some environment signal (`TMUX_PANE` for our use case), finds the real binary on `$PATH` (skipping its own directory by inode comparison), writes a temp settings file with `agent-status` hook commands and the appropriate flag (Claude Code's `--settings`, codex's `-c notify=...`, etc.), and runs the real binary as a child so it can clean up the temp file via `trap`. The Rust `Agent` impl is unchanged — the wrapper still pipes the agent's normal hook JSON to `agent-status set`/`clear`, so the `extract_session_id` contract still applies. See `extensions/claude-wrapper.sh` for the reference implementation.
+Agents that accept a `--settings <file>` flag (currently only Claude Code) can be installed via a shell alias instead of manual settings.json editing: `alias claude='claude --settings "$(agent-status agent-settings)"'`. The `agent-settings` subcommand calls `build_settings_json` in `commands.rs` (pure JSON construction using `serde_json::json!`) and writes the result to `${XDG_RUNTIME_DIR:-/tmp}/agent-status/settings/<agent>.json` using `current_exe()` for the binary path. To wire a new agent here, extend `build_settings_json` to match on the agent name and return the agent's hook JSON.
 
 ## Wire compatibility
 
