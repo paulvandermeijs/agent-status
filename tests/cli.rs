@@ -279,16 +279,30 @@ fn agent_extension_unknown_agent_exits_nonzero() {
 }
 
 #[test]
-fn agent_extension_unsupported_agent_exits_nonzero() {
-    // Agents without `--settings` integration (e.g. pi-coding-agent, opencode)
-    // should return an error rather than silently producing nothing.
+fn agent_extension_pi_coding_agent_writes_ts_file() {
     let tmp = TempDir::new().unwrap();
     let state_dir = tmp.path().join("agent-status");
-    let (_, stderr, code) = run(
+
+    let (stdout, stderr, code) = run(
         &state_dir,
         &["agent-extension", "--agent", "pi-coding-agent"],
         None,
     );
-    assert_ne!(code, 0);
-    assert!(stderr.contains("alias-style integration"), "stderr: {stderr:?}");
+    assert_eq!(code, 0, "stderr: {stderr}");
+
+    let printed_path = stdout.trim_end_matches('\n');
+    let expected = state_dir.join("extensions").join("pi-coding-agent.ts");
+    assert_eq!(printed_path, expected.to_string_lossy());
+
+    let contents = std::fs::read_to_string(&expected).expect("extension file written");
+    assert!(
+        contents.contains(r#"const BIN = ""#),
+        "expected substituted BIN, got:\n{contents}",
+    );
+    assert!(
+        !contents.contains("process.env.AGENT_STATUS_BIN ??"),
+        "env-fallback should have been replaced",
+    );
+    assert!(contents.contains("export default function"));
+    assert!(contents.contains("pi.on(\"agent_end\""));
 }
