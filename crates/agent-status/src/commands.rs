@@ -115,9 +115,14 @@ pub fn build_entry(
 /// plain text — styling is left to the tmux config so users can pick their own colors.
 #[must_use]
 pub fn format_status(entries: &[(String, AttentionEntry)]) -> Option<String> {
-    match entries.len() {
+    let waiting: Vec<&AttentionEntry> = entries
+        .iter()
+        .filter(|(_, e)| e.event != "working")
+        .map(|(_, e)| e)
+        .collect();
+    match waiting.len() {
         0 => None,
-        1 => Some(format!("[!] {}", entries[0].1.project)),
+        1 => Some(format!("[!] {}", waiting[0].project)),
         n => Some(format!("[!] {n} projects waiting")),
     }
 }
@@ -135,23 +140,27 @@ pub fn format_list(entries: &[(String, AttentionEntry)]) -> String {
     const AGENT_CAP: usize = 16;
     const MESSAGE_CAP: usize = 80;
 
-    if entries.is_empty() {
+    let visible: Vec<&(String, AttentionEntry)> = entries
+        .iter()
+        .filter(|(_, e)| e.event != "working")
+        .collect();
+    if visible.is_empty() {
         return String::new();
     }
 
-    let project_width = entries
+    let project_width = visible
         .iter()
         .map(|(_, e)| e.project.chars().count().min(PROJECT_CAP))
         .max()
         .unwrap_or(0);
-    let agent_width = entries
+    let agent_width = visible
         .iter()
         .map(|(_, e)| e.agent.chars().count().min(AGENT_CAP))
         .max()
         .unwrap_or(0);
 
     let mut out = String::new();
-    for (sid, e) in entries {
+    for (sid, e) in &visible {
         let marker = if e.event == "notify" { "[!]" } else { "[*]" };
         let project = truncate_chars(&e.project, PROJECT_CAP);
         let agent = truncate_chars(&e.agent, AGENT_CAP);
@@ -490,6 +499,43 @@ mod tests {
         e.ts = 100;
         let out = format_preview(&e, 50);
         assert!(out.contains("Age:        0s"), "got: {out}");
+    }
+
+    #[test]
+    fn format_status_ignores_working_entries() {
+        let mut e = entry("alpha", "%1", "working");
+        e.event = "working".into();
+        // A working-only entry should produce no indicator at all.
+        assert_eq!(format_status(&[("s1".into(), e)]), None);
+    }
+
+    #[test]
+    fn format_status_counts_only_non_working_entries() {
+        let mut working = entry("alpha", "%1", "working");
+        working.event = "working".into();
+        let waiting = entry("beta", "%2", "notify");
+        let entries = vec![
+            ("s1".into(), working),
+            ("s2".into(), waiting),
+        ];
+        // Only the waiting entry should count toward the status line.
+        assert_eq!(format_status(&entries).as_deref(), Some("[!] beta"));
+    }
+
+    #[test]
+    fn format_list_ignores_working_entries() {
+        let mut working = entry("alpha", "%1", "working");
+        working.event = "working".into();
+        let waiting = entry("beta", "%2", "notify");
+        let out = format_list(&[
+            ("s1".into(), working),
+            ("s2".into(), waiting),
+        ]);
+        // The working row must not appear; only the notify row should.
+        let lines: Vec<&str> = out.lines().collect();
+        assert_eq!(lines.len(), 1, "got: {lines:?}");
+        assert!(lines[0].contains("beta"));
+        assert!(!lines[0].contains("alpha"));
     }
 
     #[test]
