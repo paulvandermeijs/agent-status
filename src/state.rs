@@ -118,6 +118,30 @@ impl StateStore {
     }
 }
 
+/// Returns whether `pid` is a live process the current user can signal.
+///
+/// Uses `kill -0 <pid>` (POSIX). Returns `true` iff the command exits 0, which
+/// means: the pid exists, and the caller has permission to send it a signal. A
+/// dead pid, a pid in another user's namespace, or `pid == 0` (which `kill(2)`
+/// treats as the whole process group — not what we want) all return `false`.
+///
+/// We deliberately do not use `libc::kill` directly so the crate keeps
+/// `unsafe_code = "forbid"`. The cost is one fork+exec of `/bin/kill` per
+/// entry checked; with the typical handful of waiting sessions this is well
+/// under a millisecond and fires only on `agent-status status`/`list`/`preview`.
+#[allow(dead_code)] // wired into StateStore::list in the next commit
+fn is_pid_alive(pid: u32) -> bool {
+    if pid == 0 {
+        return false;
+    }
+    std::process::Command::new("kill")
+        .args(["-0", &pid.to_string()])
+        .stderr(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success())
+}
+
 fn validate_session_id(session_id: &str) -> io::Result<()> {
     if session_id.is_empty()
         || session_id.contains('/')
@@ -333,5 +357,25 @@ mod tests {
         }
         let err = store.remove("../escape").unwrap_err();
         assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+    }
+
+    #[test]
+    fn is_pid_alive_returns_true_for_self() {
+        let me = std::process::id();
+        assert!(is_pid_alive(me), "kill -0 of own pid should succeed");
+    }
+
+    #[test]
+    fn is_pid_alive_returns_false_for_impossible_pid() {
+        // pid_max on Linux is typically 4194304 (2^22); macOS 99998. Both well below 1_000_000_000.
+        assert!(!is_pid_alive(1_000_000_000));
+    }
+
+    #[test]
+    fn is_pid_alive_returns_false_for_pid_zero() {
+        // kill(0, 0) signals the whole process group — not what we want. The helper
+        // must reject pid 0 explicitly so a corrupted state file with pid:0 doesn't
+        // accidentally keep itself alive.
+        assert!(!is_pid_alive(0));
     }
 }
