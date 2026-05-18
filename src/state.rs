@@ -10,19 +10,27 @@ use std::path::PathBuf;
 /// the bash version of this tool.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct AttentionEntry {
+    /// Stable identifier of the agent that wrote this entry (e.g. `"claude-code"`).
     pub agent: String,
+    /// Basename of the project directory (typically the cwd's last component).
     pub project: String,
+    /// Absolute path of the project directory at the time the hook fired.
     pub cwd: String,
+    /// Hook event label, for example `notify` or `done`.
     pub event: String,
+    /// Tmux pane id (such as `%17`), or empty if the hook fired outside tmux.
     pub tmux_pane: String,
+    /// Unix timestamp (seconds) when the entry was written.
     pub ts: u64,
+    /// Optional last-message text from the agent (e.g. Claude Code Notification's `message`
+    /// field). Absent in the JSON when `None`; absent on entries written by older binaries.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
     /// PID of the agent process at the time the hook fired (typically `getppid()`
-    /// from inside the hook script — the claude/opencode/pi binary). Used by
-    /// [`StateStore::prune_dead`] to clean up state files whose owning process
-    /// has exited without firing its session-end hook. Absent in entries written
-    /// by older binaries; entries without a pid are never auto-pruned.
+    /// from inside the hook script — the claude/opencode/pi binary). Used to clean
+    /// up state files whose owning process has exited without firing its
+    /// session-end hook. Absent in entries written by older binaries; entries
+    /// without a pid are never auto-pruned.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pid: Option<u32>,
 }
