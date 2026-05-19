@@ -242,8 +242,11 @@ fn agent_extension_unknown_agent_exits_nonzero() {
     let tmp = TempDir::new().unwrap();
     let state_dir = tmp.path().join("agent-status");
     let (_, stderr, code) = run(&state_dir, &["agent-extension", "--agent", "frobnicator"], None);
-    assert_ne!(code, 0, "should exit non-zero for unknown agent");
-    assert!(stderr.contains("unknown agent"), "stderr: {stderr:?}");
+    assert_eq!(code, 2, "clap parse error should exit 2");
+    assert!(
+        stderr.contains("invalid value 'frobnicator'") || stderr.contains("possible values"),
+        "stderr: {stderr:?}",
+    );
 }
 
 #[test]
