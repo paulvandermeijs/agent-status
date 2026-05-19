@@ -4,9 +4,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use clap::{Parser, Subcommand};
 
+use agent_status::agents::AgentName;
 use agent_status::commands::{build_entry, build_extension, format_list, format_status};
 use agent_status::state::StateStore;
-use agent_status::agents;
 
 /// Tmux-integrated indicator showing which AI coding agent sessions are waiting on user input.
 ///
@@ -33,18 +33,18 @@ enum Cmd {
         /// Event label stored with the entry (e.g. `notify`, `done`).
         #[arg(default_value = "attention")]
         event: String,
-        /// Identifier of the agent invoking the hook (e.g. `claude-code`).
-        #[arg(long, default_value = "claude-code")]
-        agent: String,
+        /// Identifier of the agent invoking the hook.
+        #[arg(long, default_value_t = AgentName::ClaudeCode, value_enum)]
+        agent: AgentName,
     },
     /// Clear this agent session's attention state.
     ///
     /// Reads the hook event JSON from stdin and removes the entry keyed by the agent's
     /// session identifier. If the field is missing or empty, exits 0 silently.
     Clear {
-        /// Identifier of the agent invoking the hook (e.g. `claude-code`).
-        #[arg(long, default_value = "claude-code")]
-        agent: String,
+        /// Identifier of the agent invoking the hook.
+        #[arg(long, default_value_t = AgentName::ClaudeCode, value_enum)]
+        agent: AgentName,
     },
     /// Print the tmux status-right line. Empty output if no sessions are waiting.
     Status,
@@ -61,8 +61,8 @@ enum Cmd {
     /// loader expects (`.json` for Claude Code, `.ts` for pi/opencode).
     AgentExtension {
         /// Identifier of the agent the extension file should target.
-        #[arg(long, default_value = "claude-code")]
-        agent: String,
+        #[arg(long, default_value_t = AgentName::ClaudeCode, value_enum)]
+        agent: AgentName,
     },
 }
 
@@ -71,11 +71,11 @@ fn main() -> ExitCode {
     let store = StateStore::from_env();
 
     let result = match cli.command {
-        Cmd::Set { event, agent } => run_set(&store, &agent, &event),
-        Cmd::Clear { agent } => run_clear(&store, &agent),
+        Cmd::Set { event, agent } => run_set(&store, agent, &event),
+        Cmd::Clear { agent } => run_clear(&store, agent),
         Cmd::Status => run_status(&store, &mut io::stdout().lock()),
         Cmd::List => run_list(&store, &mut io::stdout().lock()),
-        Cmd::AgentExtension { agent } => run_agent_extension(&agent, &mut io::stdout().lock()),
+        Cmd::AgentExtension { agent } => run_agent_extension(agent, &mut io::stdout().lock()),
     };
 
     match result {
@@ -87,13 +87,8 @@ fn main() -> ExitCode {
     }
 }
 
-fn run_set(store: &StateStore, agent_name: &str, event: &str) -> io::Result<()> {
-    let Some(agent) = agents::by_name(agent_name) else {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!("unknown agent: {agent_name}"),
-        ));
-    };
+fn run_set(store: &StateStore, agent_name: AgentName, event: &str) -> io::Result<()> {
+    let agent = agent_name.agent();
 
     let mut buf = String::new();
     io::stdin().read_to_string(&mut buf)?;
@@ -132,13 +127,8 @@ fn run_set(store: &StateStore, agent_name: &str, event: &str) -> io::Result<()> 
     Ok(())
 }
 
-fn run_clear(store: &StateStore, agent_name: &str) -> io::Result<()> {
-    let Some(agent) = agents::by_name(agent_name) else {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!("unknown agent: {agent_name}"),
-        ));
-    };
+fn run_clear(store: &StateStore, agent_name: AgentName) -> io::Result<()> {
+    let agent = agent_name.agent();
 
     let mut buf = String::new();
     io::stdin().read_to_string(&mut buf)?;
@@ -168,21 +158,10 @@ fn run_list(store: &StateStore, out: &mut impl Write) -> io::Result<()> {
     Ok(())
 }
 
-fn run_agent_extension(agent_name: &str, out: &mut impl Write) -> io::Result<()> {
-    let Some(agent) = agents::by_name(agent_name) else {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!("unknown agent: {agent_name}"),
-        ));
-    };
+fn run_agent_extension(agent_name: AgentName, out: &mut impl Write) -> io::Result<()> {
     let bin_path = std::env::current_exe()?;
     let bin_str = bin_path.to_string_lossy();
-    let Some(extension) = build_extension(&bin_str, agent.name()) else {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!("agent has no alias-style integration: {agent_name}"),
-        ));
-    };
+    let extension = build_extension(&bin_str, agent_name);
     let extension_path = extension_path_for(&extension.filename);
     if let Some(parent) = extension_path.parent() {
         std::fs::create_dir_all(parent)?;

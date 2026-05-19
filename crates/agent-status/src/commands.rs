@@ -1,3 +1,4 @@
+use crate::agents::AgentName;
 use crate::state::AttentionEntry;
 use std::path::Path;
 
@@ -13,28 +14,27 @@ pub struct ExtensionFile {
 
 /// Build the extension/settings file an alias-installed agent loads at launch.
 ///
-/// Returns `Some(ExtensionFile)` for agents that support a file-argument
-/// integration (`claude-code` uses `--settings <file>`, `pi-coding-agent`
-/// uses `-e <file>`, and `opencode`'s in-process plugin file can be copied
-/// once); returns `None` for any other agent name. The `filename` member is
-/// the basename to write as (`claude-code.json`, `pi-coding-agent.ts`,
-/// `opencode.ts`); the `content` member is the file body.
+/// Every [`AgentName`] variant has a branch (the match is exhaustive), so the
+/// caller always gets an [`ExtensionFile`]. `claude-code` uses `--settings
+/// <file>`, `pi-coding-agent` uses `-e <file>`, and `opencode`'s in-process
+/// plugin file can be copied once. The `filename` member is the basename to
+/// write as (`claude-code.json`, `pi-coding-agent.ts`, `opencode.ts`); the
+/// `content` member is the file body.
 #[must_use]
-pub fn build_extension(bin_path: &str, agent_name: &str) -> Option<ExtensionFile> {
-    match agent_name {
-        "claude-code" => Some(ExtensionFile {
+pub fn build_extension(bin_path: &str, agent: AgentName) -> ExtensionFile {
+    match agent {
+        AgentName::ClaudeCode => ExtensionFile {
             filename: "claude-code.json".to_string(),
             content: build_claude_code_settings(bin_path),
-        }),
-        "pi-coding-agent" => Some(ExtensionFile {
+        },
+        AgentName::PiCodingAgent => ExtensionFile {
             filename: "pi-coding-agent.ts".to_string(),
             content: build_pi_extension(bin_path),
-        }),
-        "opencode" => Some(ExtensionFile {
+        },
+        AgentName::Opencode => ExtensionFile {
             filename: "opencode.ts".to_string(),
             content: build_opencode_extension(bin_path),
-        }),
-        _ => None,
+        },
     }
 }
 
@@ -476,14 +476,8 @@ mod tests {
     }
 
     #[test]
-    fn build_extension_returns_none_for_unsupported_agent() {
-        assert!(build_extension("/x/agent-status", "frobnicator").is_none());
-    }
-
-    #[test]
-    fn build_extension_returns_some_for_claude_code() {
-        let ext = build_extension("/x/agent-status", "claude-code")
-            .expect("claude-code is supported");
+    fn build_extension_returns_extension_for_claude_code() {
+        let ext = build_extension("/x/agent-status", AgentName::ClaudeCode);
         assert_eq!(ext.filename, "claude-code.json");
         let parsed: serde_json::Value = serde_json::from_str(&ext.content).unwrap();
         assert!(parsed.get("hooks").is_some(), "missing top-level hooks key");
@@ -491,7 +485,7 @@ mod tests {
 
     #[test]
     fn build_extension_claude_code_wires_all_hook_events() {
-        let ext = build_extension("/x/agent-status", "claude-code").unwrap();
+        let ext = build_extension("/x/agent-status", AgentName::ClaudeCode);
         for event in [
             "Notification",
             "PermissionRequest",
@@ -507,7 +501,7 @@ mod tests {
 
     #[test]
     fn build_extension_claude_code_uses_set_and_clear_correctly() {
-        let ext = build_extension("/path/to/agent-status", "claude-code").unwrap();
+        let ext = build_extension("/path/to/agent-status", AgentName::ClaudeCode);
         assert!(ext.content.contains("set --agent claude-code notify"));
         assert!(ext.content.contains("set --agent claude-code done"));
         assert!(ext.content.contains("clear --agent claude-code"));
@@ -516,8 +510,10 @@ mod tests {
 
     #[test]
     fn build_extension_escapes_unsafe_chars_in_bin_path() {
-        let ext = build_extension(r#"/x/has"quote\and-backslash/agent-status"#, "claude-code")
-            .unwrap();
+        let ext = build_extension(
+            r#"/x/has"quote\and-backslash/agent-status"#,
+            AgentName::ClaudeCode,
+        );
         let parsed: serde_json::Value = serde_json::from_str(&ext.content).unwrap();
         let command = parsed
             .pointer("/hooks/Notification/0/hooks/0/command")
@@ -528,8 +524,7 @@ mod tests {
 
     #[test]
     fn build_extension_returns_pi_coding_agent_extension() {
-        let ext = build_extension("/abs/path/agent-status", "pi-coding-agent")
-            .expect("pi-coding-agent is supported");
+        let ext = build_extension("/abs/path/agent-status", AgentName::PiCodingAgent);
         assert_eq!(ext.filename, "pi-coding-agent.ts");
         assert!(
             ext.content.contains(r#"const BIN = "/abs/path/agent-status";"#),
@@ -545,8 +540,10 @@ mod tests {
 
     #[test]
     fn build_extension_pi_extension_json_escapes_bin_path() {
-        let ext = build_extension(r#"/x/has"quote\and-backslash/agent-status"#, "pi-coding-agent")
-            .unwrap();
+        let ext = build_extension(
+            r#"/x/has"quote\and-backslash/agent-status"#,
+            AgentName::PiCodingAgent,
+        );
         assert!(
             ext.content.contains(r#"const BIN = "/x/has\"quote\\and-backslash/agent-status";"#),
             "BIN line not escaped correctly; got:\n{}",
@@ -556,8 +553,7 @@ mod tests {
 
     #[test]
     fn build_extension_returns_opencode_extension() {
-        let ext = build_extension("/abs/path/agent-status", "opencode")
-            .expect("opencode is supported");
+        let ext = build_extension("/abs/path/agent-status", AgentName::Opencode);
         assert_eq!(ext.filename, "opencode.ts");
         assert!(
             ext.content.contains(r#"const BIN = "/abs/path/agent-status";"#),
@@ -573,8 +569,10 @@ mod tests {
 
     #[test]
     fn build_extension_opencode_extension_json_escapes_bin_path() {
-        let ext = build_extension(r#"/x/has"quote\and-backslash/agent-status"#, "opencode")
-            .unwrap();
+        let ext = build_extension(
+            r#"/x/has"quote\and-backslash/agent-status"#,
+            AgentName::Opencode,
+        );
         assert!(
             ext.content.contains(r#"const BIN = "/x/has\"quote\\and-backslash/agent-status";"#),
             "BIN line not escaped correctly; got:\n{}",
@@ -584,7 +582,7 @@ mod tests {
 
     #[test]
     fn build_extension_claude_code_user_prompt_submit_sets_working() {
-        let ext = build_extension("/path/agent-status", "claude-code").unwrap();
+        let ext = build_extension("/path/agent-status", AgentName::ClaudeCode);
         let parsed: serde_json::Value = serde_json::from_str(&ext.content).unwrap();
         let cmd = parsed
             .pointer("/hooks/UserPromptSubmit/0/hooks/0/command")
@@ -598,7 +596,7 @@ mod tests {
 
     #[test]
     fn build_extension_claude_code_pre_tool_use_sets_working() {
-        let ext = build_extension("/path/agent-status", "claude-code").unwrap();
+        let ext = build_extension("/path/agent-status", AgentName::ClaudeCode);
         let parsed: serde_json::Value = serde_json::from_str(&ext.content).unwrap();
         let cmd = parsed
             .pointer("/hooks/PreToolUse/0/hooks/0/command")
@@ -617,7 +615,7 @@ mod tests {
         // PreToolUse-emitted `working` state stays until the user resolves the
         // dialog — so the tmux indicator and agent-switcher would silently miss
         // the "needs you now" transition.
-        let ext = build_extension("/path/agent-status", "claude-code").unwrap();
+        let ext = build_extension("/path/agent-status", AgentName::ClaudeCode);
         let parsed: serde_json::Value = serde_json::from_str(&ext.content).unwrap();
         let cmd = parsed
             .pointer("/hooks/PermissionRequest/0/hooks/0/command")
@@ -636,7 +634,7 @@ mod tests {
         // user has typed their first prompt. Clearing on SessionStart (the
         // previous behavior) made the row invisible until UserPromptSubmit or
         // PreToolUse fired.
-        let ext = build_extension("/path/agent-status", "claude-code").unwrap();
+        let ext = build_extension("/path/agent-status", AgentName::ClaudeCode);
         let parsed: serde_json::Value = serde_json::from_str(&ext.content).unwrap();
         let cmd = parsed
             .pointer("/hooks/SessionStart/0/hooks/0/command")
@@ -651,7 +649,7 @@ mod tests {
     #[test]
     fn build_extension_claude_code_session_end_still_clears() {
         // SessionEnd is the only lifecycle event that should remove the row.
-        let ext = build_extension("/path/agent-status", "claude-code").unwrap();
+        let ext = build_extension("/path/agent-status", AgentName::ClaudeCode);
         let parsed: serde_json::Value = serde_json::from_str(&ext.content).unwrap();
         let cmd = parsed
             .pointer("/hooks/SessionEnd/0/hooks/0/command")
