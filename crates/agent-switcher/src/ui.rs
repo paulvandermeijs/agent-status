@@ -87,7 +87,7 @@ fn sessions_table(app: &App) -> Table<'_> {
 
     Table::new(rows, widths)
         .header(
-            Row::new(vec!["", "Session", "Agent", "Last response"]).style(
+            Row::new(vec!["", "Session", "Agent", "Activity"]).style(
                 Style::default()
                     .fg(Color::DarkGray)
                     .add_modifier(Modifier::BOLD),
