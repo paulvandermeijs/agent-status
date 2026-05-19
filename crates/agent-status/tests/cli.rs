@@ -351,3 +351,43 @@ fn working_status_is_recorded_but_hidden_from_indicator_and_list() {
     assert_eq!(lines.len(), 1, "got: {lines:?}");
     assert!(lines[0].contains("sess-wait"));
 }
+
+#[test]
+fn working_entry_with_pre_tool_use_payload_records_activity_message() {
+    let tmp = TempDir::new().unwrap();
+    let state_dir = tmp.path().join("agent-status");
+
+    // Claude Code PreToolUse payload shape — what the real hook pipes.
+    let payload = r#"{
+        "session_id": "sess-work",
+        "transcript_path": "/x/y.jsonl",
+        "tool_name": "Read",
+        "tool_input": {"file_path": "/repo/src/lib.rs"}
+    }"#;
+    let (_, stderr, code) = run(
+        &state_dir,
+        &["set", "working", "--agent", "claude-code"],
+        Some(payload),
+    );
+    assert_eq!(code, 0, "stderr: {stderr}");
+
+    // State file should exist.
+    let state_file = state_dir.join("sess-work");
+    assert!(state_file.exists(), "expected state file at {state_file:?}");
+
+    // Parse it back and check the message field carries the activity.
+    let raw = std::fs::read_to_string(&state_file).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&raw).unwrap();
+    assert_eq!(parsed["event"], "working");
+    assert_eq!(
+        parsed["message"].as_str(),
+        Some("Reading src/lib.rs"),
+        "expected derived activity in message; got: {raw}",
+    );
+
+    // Working entries must STILL be hidden from status and list.
+    let (stdout, _, _) = run(&state_dir, &["status"], None);
+    assert_eq!(stdout, "", "working must not appear in tmux status");
+    let (stdout, _, _) = run(&state_dir, &["list"], None);
+    assert_eq!(stdout, "", "working must not appear in switcher list");
+}
