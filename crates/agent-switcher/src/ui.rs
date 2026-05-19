@@ -55,6 +55,7 @@ fn sessions_table(app: &App) -> Table<'_> {
                 "working" => (spinner.to_string(), Color::Cyan),
                 "notify" => ("!".to_string(), Color::Yellow),
                 "done" => ("✓".to_string(), Color::Green),
+                "idle" => ("·".to_string(), Color::DarkGray),
                 other => (other.chars().next().unwrap_or('?').to_string(), Color::Gray),
             };
             let session = display_session(sid, &e.project);

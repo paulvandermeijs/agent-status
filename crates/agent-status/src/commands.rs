@@ -42,16 +42,18 @@ fn build_claude_code_settings(bin_path: &str) -> String {
     let set_notify = format!("{bin_path} set --agent claude-code notify");
     let set_done = format!("{bin_path} set --agent claude-code done");
     let set_working = format!("{bin_path} set --agent claude-code working");
+    let set_idle = format!("{bin_path} set --agent claude-code idle");
     let clear = format!("{bin_path} clear --agent claude-code");
 
     let value = serde_json::json!({
         "hooks": {
-            "Notification":     [{"hooks": [{"type": "command", "command": set_notify}]}],
-            "Stop":             [{"hooks": [{"type": "command", "command": set_done}]}],
-            "UserPromptSubmit": [{"hooks": [{"type": "command", "command": set_working}]}],
-            "PreToolUse":       [{"hooks": [{"type": "command", "command": set_working}]}],
-            "SessionStart":     [{"hooks": [{"type": "command", "command": clear}]}],
-            "SessionEnd":       [{"hooks": [{"type": "command", "command": clear}]}],
+            "Notification":      [{"hooks": [{"type": "command", "command": &set_notify}]}],
+            "PermissionRequest": [{"hooks": [{"type": "command", "command": set_notify}]}],
+            "Stop":              [{"hooks": [{"type": "command", "command": set_done}]}],
+            "UserPromptSubmit":  [{"hooks": [{"type": "command", "command": &set_working}]}],
+            "PreToolUse":        [{"hooks": [{"type": "command", "command": set_working}]}],
+            "SessionStart":      [{"hooks": [{"type": "command", "command": set_idle}]}],
+            "SessionEnd":        [{"hooks": [{"type": "command", "command": clear}]}],
         }
     });
     serde_json::to_string_pretty(&value).expect("serde_json::Value always serializes")
@@ -118,7 +120,7 @@ pub fn build_entry(
 pub fn format_status(entries: &[(String, AttentionEntry)]) -> Option<String> {
     let waiting: Vec<&AttentionEntry> = entries
         .iter()
-        .filter(|(_, e)| e.event != "working")
+        .filter(|(_, e)| needs_attention(&e.event))
         .map(|(_, e)| e)
         .collect();
     match waiting.len() {
@@ -143,7 +145,7 @@ pub fn format_list(entries: &[(String, AttentionEntry)]) -> String {
 
     let visible: Vec<&(String, AttentionEntry)> = entries
         .iter()
-        .filter(|(_, e)| e.event != "working")
+        .filter(|(_, e)| needs_attention(&e.event))
         .collect();
     if visible.is_empty() {
         return String::new();
@@ -185,6 +187,17 @@ pub fn format_list(entries: &[(String, AttentionEntry)]) -> String {
         out.push('\n');
     }
     out
+}
+
+/// Whether an `event` value represents a session that wants the user's eyes
+/// right now. `notify` is an explicit "Claude is blocked on you" signal; `done`
+/// is the just-finished state that the next prompt will move on from. Other
+/// values (`working`, `idle`, or anything the agent layer invents later) are
+/// alive-but-not-asking and are hidden from the tmux indicator and the legacy
+/// fzf TSV. The switcher reads the store directly and surfaces every event
+/// value, so this filter does NOT apply there.
+fn needs_attention(event: &str) -> bool {
+    !matches!(event, "working" | "idle")
 }
 
 fn truncate_chars(s: &str, cap: usize) -> String {
@@ -414,6 +427,40 @@ mod tests {
     }
 
     #[test]
+    fn format_status_ignores_idle_entries() {
+        // An idle session (Claude just started, no prompt yet) does not need
+        // the user's attention — it's a placeholder so the switcher can list
+        // it. The tmux status line should stay clean.
+        let e = entry("alpha", "%1", "idle");
+        assert_eq!(format_status(&[("s1".into(), e)]), None);
+    }
+
+    #[test]
+    fn format_status_counts_only_attention_needing_entries() {
+        // working + idle should both be filtered; only notify/done count.
+        let idle = entry("alpha", "%1", "idle");
+        let working = entry("beta", "%2", "working");
+        let waiting = entry("gamma", "%3", "notify");
+        let entries = vec![
+            ("s1".into(), idle),
+            ("s2".into(), working),
+            ("s3".into(), waiting),
+        ];
+        assert_eq!(format_status(&entries).as_deref(), Some("[!] gamma"));
+    }
+
+    #[test]
+    fn format_list_ignores_idle_entries() {
+        let idle = entry("alpha", "%1", "idle");
+        let waiting = entry("beta", "%2", "notify");
+        let out = format_list(&[("s1".into(), idle), ("s2".into(), waiting)]);
+        let lines: Vec<&str> = out.lines().collect();
+        assert_eq!(lines.len(), 1, "got: {lines:?}");
+        assert!(lines[0].contains("beta"));
+        assert!(!lines[0].contains("alpha"));
+    }
+
+    #[test]
     fn format_list_ignores_working_entries() {
         let working = entry("alpha", "%1", "working");
         let waiting = entry("beta", "%2", "notify");
@@ -443,10 +490,11 @@ mod tests {
     }
 
     #[test]
-    fn build_extension_claude_code_wires_all_six_hook_events() {
+    fn build_extension_claude_code_wires_all_hook_events() {
         let ext = build_extension("/x/agent-status", "claude-code").unwrap();
         for event in [
             "Notification",
+            "PermissionRequest",
             "Stop",
             "UserPromptSubmit",
             "PreToolUse",
@@ -563,20 +611,55 @@ mod tests {
     }
 
     #[test]
-    fn build_extension_claude_code_session_lifecycle_still_clears() {
-        // SessionStart and SessionEnd remain `clear` — they end the session,
-        // they don't represent active work.
+    fn build_extension_claude_code_permission_request_sets_notify() {
+        // PermissionRequest fires when Claude Code shows a tool-permission dialog
+        // (after PreToolUse, before the user clicks Yes/No). Without this hook the
+        // PreToolUse-emitted `working` state stays until the user resolves the
+        // dialog — so the tmux indicator and agent-switcher would silently miss
+        // the "needs you now" transition.
         let ext = build_extension("/path/agent-status", "claude-code").unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&ext.content).unwrap();
-        for event in ["SessionStart", "SessionEnd"] {
-            let cmd = parsed
-                .pointer(&format!("/hooks/{event}/0/hooks/0/command"))
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_else(|| panic!("missing {event} command"));
-            assert!(
-                cmd.contains("clear --agent claude-code"),
-                "{event} should still clear; got: {cmd}",
-            );
-        }
+        let cmd = parsed
+            .pointer("/hooks/PermissionRequest/0/hooks/0/command")
+            .and_then(serde_json::Value::as_str)
+            .expect("PermissionRequest command");
+        assert!(
+            cmd.contains("set --agent claude-code notify"),
+            "got: {cmd}",
+        );
+    }
+
+    #[test]
+    fn build_extension_claude_code_session_start_sets_idle() {
+        // SessionStart registers the session as `idle` so every Claude session
+        // appears in the switcher from the moment it starts — even before the
+        // user has typed their first prompt. Clearing on SessionStart (the
+        // previous behavior) made the row invisible until UserPromptSubmit or
+        // PreToolUse fired.
+        let ext = build_extension("/path/agent-status", "claude-code").unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&ext.content).unwrap();
+        let cmd = parsed
+            .pointer("/hooks/SessionStart/0/hooks/0/command")
+            .and_then(serde_json::Value::as_str)
+            .expect("SessionStart command");
+        assert!(
+            cmd.contains("set --agent claude-code idle"),
+            "got: {cmd}",
+        );
+    }
+
+    #[test]
+    fn build_extension_claude_code_session_end_still_clears() {
+        // SessionEnd is the only lifecycle event that should remove the row.
+        let ext = build_extension("/path/agent-status", "claude-code").unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&ext.content).unwrap();
+        let cmd = parsed
+            .pointer("/hooks/SessionEnd/0/hooks/0/command")
+            .and_then(serde_json::Value::as_str)
+            .expect("SessionEnd command");
+        assert!(
+            cmd.contains("clear --agent claude-code"),
+            "SessionEnd should still clear; got: {cmd}",
+        );
     }
 }

@@ -15,7 +15,7 @@ $ agent-status status        # nothing waiting
 
 ## How it works
 
-Claude Code [hooks][hooks] fire `agent-status set` on `Notification` and `Stop`, and `agent-status clear` on `UserPromptSubmit` / `PreToolUse` / `SessionStart` / `SessionEnd`. Each `set` writes one JSON file per session under `${XDG_RUNTIME_DIR:-/tmp}/agent-status/`, keyed by `session_id`. tmux's `status-right` invokes `agent-status status` on its refresh interval; the command lists the state directory and renders the indicator (project name for one waiting session, count for many, nothing for none).
+Claude Code [hooks][hooks] fire `agent-status set notify` on `Notification` and `PermissionRequest`, `set done` on `Stop`, `set working` on `UserPromptSubmit` and `PreToolUse`, `set idle` on `SessionStart`, and `clear` on `SessionEnd`. Each `set` writes one JSON file per session under `${XDG_RUNTIME_DIR:-/tmp}/agent-status/`, keyed by `session_id`. tmux's `status-right` invokes `agent-status status` on its refresh interval; the command lists the state directory and renders the indicator (project name for one waiting session, count for many, nothing for none).
 
 No daemon. The filesystem is the state store; each session writes only its own keyed file, so concurrent writers never contend.
 
@@ -51,19 +51,20 @@ If you'd rather see the hooks in your settings file, skip the alias and merge th
 ```json
 {
   "hooks": {
-    "Notification":     [{ "hooks": [{ "type": "command", "command": "$HOME/.claude/bin/agent-status set --agent claude-code notify"  }] }],
-    "Stop":             [{ "hooks": [{ "type": "command", "command": "$HOME/.claude/bin/agent-status set --agent claude-code done"    }] }],
-    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "$HOME/.claude/bin/agent-status set --agent claude-code working" }] }],
-    "PreToolUse":       [{ "hooks": [{ "type": "command", "command": "$HOME/.claude/bin/agent-status set --agent claude-code working" }] }],
-    "SessionStart":     [{ "hooks": [{ "type": "command", "command": "$HOME/.claude/bin/agent-status clear --agent claude-code"       }] }],
-    "SessionEnd":       [{ "hooks": [{ "type": "command", "command": "$HOME/.claude/bin/agent-status clear --agent claude-code"       }] }]
+    "Notification":      [{ "hooks": [{ "type": "command", "command": "$HOME/.claude/bin/agent-status set --agent claude-code notify"  }] }],
+    "PermissionRequest": [{ "hooks": [{ "type": "command", "command": "$HOME/.claude/bin/agent-status set --agent claude-code notify"  }] }],
+    "Stop":              [{ "hooks": [{ "type": "command", "command": "$HOME/.claude/bin/agent-status set --agent claude-code done"    }] }],
+    "UserPromptSubmit":  [{ "hooks": [{ "type": "command", "command": "$HOME/.claude/bin/agent-status set --agent claude-code working" }] }],
+    "PreToolUse":        [{ "hooks": [{ "type": "command", "command": "$HOME/.claude/bin/agent-status set --agent claude-code working" }] }],
+    "SessionStart":      [{ "hooks": [{ "type": "command", "command": "$HOME/.claude/bin/agent-status set --agent claude-code idle"   }] }],
+    "SessionEnd":        [{ "hooks": [{ "type": "command", "command": "$HOME/.claude/bin/agent-status clear --agent claude-code"      }] }]
   }
 }
 ```
 
 Pick one route, not both. If you have manual hooks AND the alias, each event fires twice — idempotent for repeats of the same `set` but wasteful.
 
-`UserPromptSubmit` and `PreToolUse` both `set ... working` so an in-flight session is recorded in the state directory; the tmux status indicator filters `working` entries out, so the bar still only shows "needs you now" sessions while the `agent-switcher` popup shows working sessions with a spinner.
+`SessionStart` writes a placeholder `idle` row so every Claude session appears in the `agent-switcher` popup from the moment it starts — even before you type the first prompt. `UserPromptSubmit` and `PreToolUse` then flip the row to `working` while Claude is mid-turn. The tmux status indicator filters both `idle` and `working` out, so the bar still only shows "needs you now" sessions (`notify` from `Notification`/`PermissionRequest`, `done` from `Stop`). The switcher shows every row, rendering `idle` as a dim dot and `working` as a spinner.
 
 ### pi
 
@@ -84,7 +85,7 @@ The extension fires on these pi lifecycle events:
 | `session_start`       | `clear --agent pi-coding-agent`                   |
 | `session_shutdown`    | `clear --agent pi-coding-agent`                   |
 
-**Known limitation:** pi has no built-in "agent paused waiting for permission" event analogous to Claude Code's `Notification` hook — pi extensions handle confirmations in-process via `ctx.ui.confirm()`. So pi-coding-agent surfaces the "done" state but not a separate "needs attention" state. In practice the dominant signal is "agent finished a turn, waiting on next prompt" anyway.
+**Known limitation:** pi has no built-in "agent paused waiting for permission" event analogous to Claude Code's `PermissionRequest` hook — pi extensions handle confirmations in-process via `ctx.ui.confirm()`. So pi-coding-agent surfaces the "done" state but not a separate "needs attention" state. In practice the dominant signal is "agent finished a turn, waiting on next prompt" anyway.
 
 #### Wiring the extension manually (fallback)
 

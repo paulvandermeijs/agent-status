@@ -79,13 +79,26 @@ The `agent` field was added in the v0.2.0 refactor. It is non-optional in the cu
 
 The `pid` field was added later still and is also optional in the schema for the same reason — entries written by older binaries simply skip the PID-based auto-prune (`is_pid_alive` is only consulted when `pid` is `Some`).
 
-The `event` field accepts a third value `"working"` in addition to `"notify"`
-and `"done"`. The Claude Code extension's `UserPromptSubmit` and `PreToolUse`
-hooks emit `set working` so an in-flight session is recorded in the state
-directory. `format_status` and `format_list` filter `working` entries out, so
-the tmux indicator and the `list` TSV output are unchanged. `agent-switcher`
-is the only consumer that surfaces working entries (with a spinner). pi and
-opencode do not yet emit `working`; their hook semantics are unchanged.
+The `event` field has four documented values: `notify`, `done`, `working`,
+`idle`. The `needs_attention` helper in `commands.rs` is the single source of
+truth for which values surface in the tmux status indicator and legacy fzf
+TSV — currently `notify` and `done`. `agent-switcher` ignores that filter
+and reads the store directly, so every row shows up there regardless of
+event value.
+
+Hook → event mapping for Claude Code (kept in
+`build_claude_code_settings`):
+- `SessionStart` → `idle` (placeholder so the switcher sees the session
+  from the moment Claude launches, even before the first prompt)
+- `UserPromptSubmit`, `PreToolUse` → `working`
+- `Notification`, `PermissionRequest` → `notify`
+- `Stop` → `done`
+- `SessionEnd` → `clear` (the only event that removes the row)
+
+pi and opencode do not yet emit `working` or `idle`; their hook semantics
+are unchanged. New event values should be added to the match in
+`needs_attention` and to the switcher's `match e.event.as_str()` block in
+`agent-switcher/src/ui.rs`.
 
 ## Dev / installed binary divergence
 
