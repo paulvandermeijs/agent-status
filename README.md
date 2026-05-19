@@ -151,6 +151,12 @@ bind-key C-a display-popup -E -w 80% -h 50% "agent-switcher"
 
 The list shows every recorded session — including those still working (animated spinner) — not just sessions waiting on your attention. That makes the popup useful as a general session jumper, while the status-bar indicator stays focused on "needs you now" sessions.
 
+While Claude Code is working, the switcher's "Activity" column shows the
+active tool — e.g. `Reading src/main.rs`, `Running: git status`,
+`Searching: fn main`. When Claude Code is waiting on you, the same column
+shows the notification message (e.g. `Claude needs your permission to
+use Bash`).
+
 Reload with `tmux source-file ~/.tmux.conf`.
 
 ## Usage

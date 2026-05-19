@@ -96,6 +96,11 @@ Hook → event mapping for Claude Code (kept in
 - `Stop` → `done`
 - `SessionEnd` → `clear` (the only event that removes the row)
 
+For PreToolUse, the hook payload's `tool_name`/`tool_input` are turned into
+a one-line activity string (`format_pre_tool_use_activity` in
+`agents/claude_code.rs`) and stored as the entry's `message`, so the
+switcher's Activity column shows what the agent is doing in real time.
+
 pi and opencode do not yet emit `working` or `idle`; their hook semantics
 are unchanged. New event values should be added to the match in
 `needs_attention` and to the switcher's `match e.event.as_str()` block in
