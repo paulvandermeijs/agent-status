@@ -22,12 +22,28 @@ impl Agent for ClaudeCodeAgent {
 
     fn extract_message(&self, stdin_json: &str) -> Option<String> {
         let v: serde_json::Value = serde_json::from_str(stdin_json).ok()?;
-        let m = v.get("message")?.as_str()?;
-        if m.is_empty() {
-            None
-        } else {
-            Some(m.to_string())
+
+        // Prefer an explicit `message` field (Notification payloads) — it's
+        // the agent's user-facing text and always more informative than a
+        // derived activity description.
+        if let Some(m) = v.get("message").and_then(serde_json::Value::as_str) {
+            if !m.is_empty() {
+                return Some(m.to_string());
+            }
         }
+
+        // Fall back to PreToolUse tool fields: synthesize an activity
+        // string. `tool_input` is allowed to be missing / null / wrong-
+        // typed — `format_pre_tool_use_activity` defends against that.
+        let tool_name = v.get("tool_name").and_then(serde_json::Value::as_str)?;
+        if tool_name.is_empty() {
+            return None;
+        }
+        let tool_input = v
+            .get("tool_input")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        Some(format_pre_tool_use_activity(tool_name, &tool_input))
     }
 }
 
@@ -42,7 +58,6 @@ impl Agent for ClaudeCodeAgent {
 ///
 /// Always returns a non-empty string. Length capping is the UI's job
 /// (`crates/agent-switcher/src/ui.rs` truncates to `MESSAGE_CAP`).
-#[allow(dead_code)]
 fn format_pre_tool_use_activity(tool_name: &str, tool_input: &serde_json::Value) -> String {
     match tool_name {
         "Bash" => {
@@ -227,6 +242,66 @@ mod tests {
     #[test]
     fn extract_message_returns_none_for_invalid_json() {
         assert!(ClaudeCodeAgent.extract_message("not json").is_none());
+    }
+
+    #[test]
+    fn extract_message_returns_activity_for_pre_tool_use_payload() {
+        let json = r#"{
+            "session_id": "abc-123",
+            "transcript_path": "/x/y.jsonl",
+            "tool_name": "Bash",
+            "tool_input": {"command": "git status", "description": "Show status"}
+        }"#;
+        assert_eq!(
+            ClaudeCodeAgent.extract_message(json).as_deref(),
+            Some("Running: git status"),
+        );
+    }
+
+    #[test]
+    fn extract_message_returns_activity_for_read_pre_tool_use_payload() {
+        let json = r#"{
+            "session_id": "abc",
+            "tool_name": "Read",
+            "tool_input": {"file_path": "/repo/src/lib.rs"}
+        }"#;
+        // /repo/src/lib.rs: 3 components, generic basename → "src/lib.rs"
+        assert_eq!(
+            ClaudeCodeAgent.extract_message(json).as_deref(),
+            Some("Reading src/lib.rs"),
+        );
+    }
+
+    #[test]
+    fn extract_message_prefers_message_field_over_tool_fields() {
+        // If both are present (defensive — shouldn't happen in practice), the
+        // explicit message wins. Notification payloads sometimes carry extra
+        // fields and we don't want them to override the user-facing message.
+        let json = r#"{
+            "session_id": "abc",
+            "message": "Permission required",
+            "tool_name": "Bash",
+            "tool_input": {"command": "rm -rf /"}
+        }"#;
+        assert_eq!(
+            ClaudeCodeAgent.extract_message(json).as_deref(),
+            Some("Permission required"),
+        );
+    }
+
+    #[test]
+    fn extract_message_returns_none_when_neither_message_nor_tool_name_present() {
+        // UserPromptSubmit, Stop, SessionStart, SessionEnd payloads don't have
+        // either field — we must keep returning None so the entry stores no
+        // message (the spinner alone communicates "working" in that case).
+        let json = r#"{"session_id":"abc","prompt":"hello"}"#;
+        assert!(ClaudeCodeAgent.extract_message(json).is_none());
+    }
+
+    #[test]
+    fn extract_message_returns_none_when_tool_name_is_empty() {
+        let json = r#"{"session_id":"abc","tool_name":"","tool_input":{}}"#;
+        assert!(ClaudeCodeAgent.extract_message(json).is_none());
     }
 
     #[test]
