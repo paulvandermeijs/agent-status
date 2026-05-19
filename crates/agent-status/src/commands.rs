@@ -66,7 +66,7 @@ fn build_claude_code_settings(bin_path: &str) -> String {
 /// keeps its env-fallback resolution at runtime — still functional, just
 /// not alias-optimized.
 const TS_BIN_RESOLUTION_LINE: &str =
-    "const BIN = process.env.AGENT_STATUS_BIN ?? `${process.env.HOME}/.claude/bin/agent-status`;";
+    "const BIN = process.env.AGENT_STATUS_BIN ?? \"agent-status\";";
 
 fn build_pi_extension(bin_path: &str) -> String {
     let template = include_str!("../extensions/pi-coding-agent.ts");

@@ -22,13 +22,11 @@ No daemon. The filesystem is the state store; each session writes only its own k
 ## Install
 
 ```sh
-cargo build --release
-mkdir -p ~/.claude/bin
-install -m 0755 target/release/agent-status   ~/.claude/bin/agent-status
-install -m 0755 target/release/agent-switcher ~/.claude/bin/agent-switcher
+cargo install --path crates/agent-status   --force
+cargo install --path crates/agent-switcher --force
 ```
 
-`~/.claude/bin` is one option; any directory works as long as the absolute path matches what you put in the hook commands and tmux config below. Each binary is around 550 KB stripped (≈1.1 MB combined) and has no runtime dependencies (tmux is invoked best-effort to refresh the status bar and switch panes; if it isn't running, the failure is silenced).
+Both binaries land in `~/.cargo/bin`. As long as that's on your `$PATH` (Cargo's installer adds it by default), the alias-based wiring below works without any further configuration. Each binary is around 550 KB stripped (≈1.1 MB combined) and has no runtime dependencies (tmux is invoked best-effort to refresh the status bar and switch panes; if it isn't running, the failure is silenced).
 
 ## Configure
 
@@ -51,13 +49,13 @@ If you'd rather see the hooks in your settings file, skip the alias and merge th
 ```json
 {
   "hooks": {
-    "Notification":      [{ "hooks": [{ "type": "command", "command": "$HOME/.claude/bin/agent-status set --agent claude-code notify"  }] }],
-    "PermissionRequest": [{ "hooks": [{ "type": "command", "command": "$HOME/.claude/bin/agent-status set --agent claude-code notify"  }] }],
-    "Stop":              [{ "hooks": [{ "type": "command", "command": "$HOME/.claude/bin/agent-status set --agent claude-code done"    }] }],
-    "UserPromptSubmit":  [{ "hooks": [{ "type": "command", "command": "$HOME/.claude/bin/agent-status set --agent claude-code working" }] }],
-    "PreToolUse":        [{ "hooks": [{ "type": "command", "command": "$HOME/.claude/bin/agent-status set --agent claude-code working" }] }],
-    "SessionStart":      [{ "hooks": [{ "type": "command", "command": "$HOME/.claude/bin/agent-status set --agent claude-code idle"   }] }],
-    "SessionEnd":        [{ "hooks": [{ "type": "command", "command": "$HOME/.claude/bin/agent-status clear --agent claude-code"      }] }]
+    "Notification":      [{ "hooks": [{ "type": "command", "command": "agent-status set --agent claude-code notify"  }] }],
+    "PermissionRequest": [{ "hooks": [{ "type": "command", "command": "agent-status set --agent claude-code notify"  }] }],
+    "Stop":              [{ "hooks": [{ "type": "command", "command": "agent-status set --agent claude-code done"    }] }],
+    "UserPromptSubmit":  [{ "hooks": [{ "type": "command", "command": "agent-status set --agent claude-code working" }] }],
+    "PreToolUse":        [{ "hooks": [{ "type": "command", "command": "agent-status set --agent claude-code working" }] }],
+    "SessionStart":      [{ "hooks": [{ "type": "command", "command": "agent-status set --agent claude-code idle"   }] }],
+    "SessionEnd":        [{ "hooks": [{ "type": "command", "command": "agent-status clear --agent claude-code"      }] }]
   }
 }
 ```
@@ -96,7 +94,7 @@ mkdir -p ~/.pi/agent/extensions
 cp crates/agent-status/extensions/pi-coding-agent.ts ~/.pi/agent/extensions/
 ```
 
-pi auto-discovers `~/.pi/agent/extensions/*.ts` on startup; no further configuration is required. If your `agent-status` binary is not at `~/.claude/bin/agent-status`, set `AGENT_STATUS_BIN` in your shell environment before launching pi — the manual copy uses the env-var fallback the alias bypasses.
+pi auto-discovers `~/.pi/agent/extensions/*.ts` on startup; no further configuration is required. The manual copy resolves `agent-status` from `$PATH`; if your binary is somewhere unusual, set `AGENT_STATUS_BIN` in your shell environment before launching pi to override the lookup.
 
 ### opencode
 
@@ -131,22 +129,22 @@ mkdir -p ~/.config/opencode/plugins
 cp crates/agent-status/extensions/opencode.ts ~/.config/opencode/plugins/
 ```
 
-This version resolves the binary path from the `AGENT_STATUS_BIN` env var, defaulting to `~/.claude/bin/agent-status`. If your binary lives elsewhere, set `AGENT_STATUS_BIN` in your shell environment before launching opencode.
+This version resolves the binary from `$PATH` (or `AGENT_STATUS_BIN` if set), so any `cargo install` location works without further configuration.
 
 ### tmux (`~/.tmux.conf`)
 
-Drop `#($HOME/.claude/bin/agent-status status)` into your existing `status-right` wherever you want the indicator to appear, and lower the refresh interval so updates feel snappy:
+Drop `#(agent-status status)` into your existing `status-right` wherever you want the indicator to appear, and lower the refresh interval so updates feel snappy:
 
 ```tmux
 set -g status-interval 5
 # example: prepend the indicator to whatever status-right you already use
-set -g status-right "#($HOME/.claude/bin/agent-status status) <your existing status-right here>"
+set -g status-right "#(agent-status status) <your existing status-right here>"
 ```
 
 Optional popup picker (prefix + `C-a`) for jumping to the waiting pane — uses the bundled `agent-switcher` TUI:
 
 ```tmux
-bind-key C-a display-popup -E -w 80% -h 50% "$HOME/.claude/bin/agent-switcher"
+bind-key C-a display-popup -E -w 80% -h 50% "agent-switcher"
 ```
 
 `agent-switcher` opens a small ratatui TUI: filter input at the top, the list of sessions in the middle, a help strip at the bottom. Type to filter (case-insensitive, matches across project / agent / message / session id); <kbd>Ctrl-N</kbd> and <kbd>Ctrl-P</kbd> (or arrow keys) move the selection; <kbd>Enter</kbd> runs `tmux switch-client` to the selected session's pane and exits; <kbd>Esc</kbd> or <kbd>Ctrl-C</kbd> exits without switching.

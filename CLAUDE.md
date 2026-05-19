@@ -102,15 +102,16 @@ are unchanged. New event values should be added to the match in
 
 ## Dev / installed binary divergence
 
-Claude Code hooks and tmux's `status-right` invoke the binary at `~/.claude/bin/agent-status`, NOT the freshly compiled `target/release/agent-status` in this checkout. To exercise source changes against the real hook flow, reinstall:
+Claude Code hooks and tmux's `status-right` invoke whatever `agent-status` resolves to on `$PATH` — typically the `cargo install` copy in `~/.cargo/bin`, NOT the freshly compiled `target/release/agent-status` in this checkout. To exercise source changes against the real hook flow, reinstall:
 
 ```sh
-cargo build --release
-install -m 0755 target/release/agent-status   ~/.claude/bin/agent-status
-install -m 0755 target/release/agent-switcher ~/.claude/bin/agent-switcher
+cargo install --path crates/agent-status   --force
+cargo install --path crates/agent-switcher --force
 ```
 
 `cargo test` always builds a fresh test binary (via `CARGO_BIN_EXE_agent-status`), so the test suite is unaffected by what's installed.
+
+Historical note: an earlier convention put both binaries at `~/.claude/bin/agent-status` / `~/.claude/bin/agent-switcher` so hook commands could hardcode an absolute path. The current alias-based wiring regenerates `claude-code.json` (and the pi/opencode TS bridges) on every launch with `current_exe()` baked in, so that bespoke directory served no purpose and was dropped — `cargo install` is the only path now.
 
 ## Subtle bits
 
