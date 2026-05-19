@@ -2,6 +2,47 @@ pub mod claude_code;
 pub mod opencode;
 pub mod pi_coding_agent;
 
+/// CLI-facing enumeration of every registered agent.
+///
+/// Mirrors the [`Agent`] trait registry but lives in the type system so the
+/// `--agent` flag, [`AgentName::agent`] dispatch, and the
+/// [`crate::commands::build_extension`] match are all compile-time checked.
+/// Wire strings (`claude-code`, etc.) match each variant's `Agent::name()`
+/// return value so on-disk state files and CLI flags use the same identifiers.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, clap::ValueEnum)]
+pub enum AgentName {
+    #[value(name = "claude-code")]
+    ClaudeCode,
+    #[value(name = "pi-coding-agent")]
+    PiCodingAgent,
+    #[value(name = "opencode")]
+    Opencode,
+}
+
+impl AgentName {
+    /// Stable wire string for this agent (matches `Agent::name()`).
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::ClaudeCode => "claude-code",
+            Self::PiCodingAgent => "pi-coding-agent",
+            Self::Opencode => "opencode",
+        }
+    }
+
+    /// Dispatch to the trait object for this agent. Equivalent to
+    /// `by_name(self.name()).expect("AgentName must always resolve")` but
+    /// the compiler knows it can't fail.
+    #[must_use]
+    pub fn agent(self) -> Box<dyn Agent> {
+        match self {
+            Self::ClaudeCode => Box::new(claude_code::ClaudeCodeAgent),
+            Self::PiCodingAgent => Box::new(pi_coding_agent::PiCodingAgent),
+            Self::Opencode => Box::new(opencode::OpencodeAgent),
+        }
+    }
+}
+
 /// An agent implementation: knows how to extract a session ID from the JSON payload that
 /// agent's hook delivers on stdin.
 pub trait Agent {
@@ -63,6 +104,38 @@ mod tests {
     fn by_name_resolves_opencode() {
         let agent = by_name("opencode").expect("opencode is a registered agent");
         assert_eq!(agent.name(), "opencode");
+    }
+
+    #[test]
+    fn agent_name_returns_wire_string_for_each_variant() {
+        assert_eq!(AgentName::ClaudeCode.name(), "claude-code");
+        assert_eq!(AgentName::PiCodingAgent.name(), "pi-coding-agent");
+        assert_eq!(AgentName::Opencode.name(), "opencode");
+    }
+
+    #[test]
+    fn agent_name_dispatch_returns_matching_trait_object() {
+        assert_eq!(AgentName::ClaudeCode.agent().name(), "claude-code");
+        assert_eq!(AgentName::PiCodingAgent.agent().name(), "pi-coding-agent");
+        assert_eq!(AgentName::Opencode.agent().name(), "opencode");
+    }
+
+    #[test]
+    fn agent_name_parses_kebab_case_via_value_enum() {
+        use clap::ValueEnum;
+        assert_eq!(
+            AgentName::from_str("claude-code", true).unwrap(),
+            AgentName::ClaudeCode,
+        );
+        assert_eq!(
+            AgentName::from_str("pi-coding-agent", true).unwrap(),
+            AgentName::PiCodingAgent,
+        );
+        assert_eq!(
+            AgentName::from_str("opencode", true).unwrap(),
+            AgentName::Opencode,
+        );
+        assert!(AgentName::from_str("frobnicator", true).is_err());
     }
 
     #[test]
