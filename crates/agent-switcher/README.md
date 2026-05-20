@@ -7,16 +7,17 @@ picker. <kbd>Enter</kbd> runs `tmux switch-client` to the selected session's
 pane.
 
 ```
-┌─Filter────────────────────┐
-│ >                          │
-└───────────────────────────┘
-┌─Sessions──────────────────────────────────────────────────────────┐
-│   Session                Agent           Activity                │
-│ ! agent-status (53fabd56) claude-code     Claude needs permission │
-│ ⠋ shai-hulud   (9b73ed57) claude-code     Reading src/main.rs     │
-│ · scratch      (4012a1cd) opencode                                │
-│ ✓ docs         (1f33ccee) claude-code     Wrote 4 files           │
-└───────────────────────────────────────────────────────────────────┘
+┌─ Filter ─────────────────────────────────────────────────────────────┐
+│ >                                                                    │
+└──────────────────────────────────────────────────────────────────────┘
+┌─ Sessions ───────────────────────────────────────────────────────────┐
+│    Session                 Agent           Activity                  │
+│  ! agent-status (53fabd56) claude-code     Claude needs permission   │
+│  ⠋ playground   (9b73ed57) claude-code     Reading src/main.rs       │
+│  · scratch      (4012a1cd) opencode                                  │
+│  ⠋ infra        (8f1ade22) pi-coding-agent Editing terraform/main.tf │
+│  ✓ docs         (1f33ccee) claude-code     Wrote 4 files             │
+└──────────────────────────────────────────────────────────────────────┘
  Ctrl-N/P or ↓/↑: navigate · Enter: switch pane · Esc / Ctrl-C: cancel
 ```
 
