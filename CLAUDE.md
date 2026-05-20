@@ -36,9 +36,14 @@ across both crates.
 
 - `crates/agent-status/src/state.rs` — owns all filesystem I/O. `AttentionEntry`
   and `StateStore`. Tests use `tempfile::TempDir` for isolation.
-- `crates/agent-status/src/commands.rs` — pure helpers (`build_entry`,
-  `format_status`, `format_list`, `build_extension`). No `std::env`,
-  `std::io`, `std::time`, or `std::fs` imports.
+- `crates/agent-status/src/commands/` — pure helpers organized one file
+  per CLI subcommand. `mod.rs` re-exports the public API
+  (`build_entry`, `format_status`, `format_list`, `build_extension`,
+  `ExtensionFile`) and owns the crate-private `needs_attention` filter
+  shared by `format_status` and `format_list`. `set.rs`, `status.rs`,
+  `list.rs`, `agent_extension.rs` each implement one subcommand's
+  helper, public API at the top, private helpers below. No `std::env`,
+  `std::io`, `std::time`, or `std::fs` imports anywhere.
 - `crates/agent-status/src/main.rs` — clap glue, impure adapter; imports from
   the library via `agent_status::…`.
 - `crates/agent-status/src/lib.rs` — module declarations + crate-root
