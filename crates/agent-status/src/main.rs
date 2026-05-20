@@ -34,7 +34,7 @@ enum Cmd {
         #[arg(default_value = "attention")]
         event: String,
         /// Identifier of the agent invoking the hook.
-        #[arg(long, default_value_t = AgentName::ClaudeCode, value_enum)]
+        #[arg(long, value_enum)]
         agent: AgentName,
     },
     /// Clear this agent session's attention state.
@@ -43,7 +43,7 @@ enum Cmd {
     /// session identifier. If the field is missing or empty, exits 0 silently.
     Clear {
         /// Identifier of the agent invoking the hook.
-        #[arg(long, default_value_t = AgentName::ClaudeCode, value_enum)]
+        #[arg(long, value_enum)]
         agent: AgentName,
     },
     /// Print the tmux status-right line. Empty output if no sessions are waiting.

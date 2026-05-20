@@ -47,7 +47,7 @@ fn end_to_end_set_status_clear() {
 
     let (_, _, code) = run(
         &state_dir,
-        &["set", "notify"],
+        &["set", "notify", "--agent", "claude-code"],
         Some(r#"{"session_id":"sess-A"}"#),
     );
     assert_eq!(code, 0);
@@ -58,7 +58,7 @@ fn end_to_end_set_status_clear() {
 
     let (_, _, code) = run(
         &state_dir,
-        &["clear"],
+        &["clear", "--agent", "claude-code"],
         Some(r#"{"session_id":"sess-A"}"#),
     );
     assert_eq!(code, 0);
@@ -83,7 +83,7 @@ fn set_with_empty_session_id_is_noop() {
     let state_dir = tmp.path().join("agent-status");
     let (_, _, code) = run(
         &state_dir,
-        &["set", "notify"],
+        &["set", "notify", "--agent", "claude-code"],
         Some(r#"{"session_id":""}"#),
     );
     assert_eq!(code, 0);
@@ -99,7 +99,7 @@ fn list_outputs_session_id_pane_display_columns() {
 
     let (_, _, code) = run(
         &state_dir,
-        &["set", "notify"],
+        &["set", "notify", "--agent", "claude-code"],
         Some(r#"{"session_id":"sess-list","message":"Permission required"}"#),
     );
     assert_eq!(code, 0);
@@ -145,7 +145,7 @@ fn repeated_clear_is_idempotent_and_silent() {
     // First clear of a never-set session: should be a clean no-op.
     let (stdout, stderr, code) = run(
         &state_dir,
-        &["clear"],
+        &["clear", "--agent", "claude-code"],
         Some(r#"{"session_id":"ghost"}"#),
     );
     assert_eq!(code, 0, "stderr: {stderr}");
@@ -154,7 +154,7 @@ fn repeated_clear_is_idempotent_and_silent() {
     // Second clear of the same session: also no-op.
     let (stdout, _, code) = run(
         &state_dir,
-        &["clear"],
+        &["clear", "--agent", "claude-code"],
         Some(r#"{"session_id":"ghost"}"#),
     );
     assert_eq!(code, 0);
@@ -163,20 +163,20 @@ fn repeated_clear_is_idempotent_and_silent() {
     // After a set, a clear should still work and a second clear is a no-op.
     let (_, _, code) = run(
         &state_dir,
-        &["set", "notify"],
+        &["set", "notify", "--agent", "claude-code"],
         Some(r#"{"session_id":"s"}"#),
     );
     assert_eq!(code, 0);
     let (stdout, _, code) = run(
         &state_dir,
-        &["clear"],
+        &["clear", "--agent", "claude-code"],
         Some(r#"{"session_id":"s"}"#),
     );
     assert_eq!(code, 0);
     assert_eq!(stdout, "", "clear of a previously-set session must stay silent");
     let (stdout, _, code) = run(
         &state_dir,
-        &["clear"],
+        &["clear", "--agent", "claude-code"],
         Some(r#"{"session_id":"s"}"#),
     );
     assert_eq!(code, 0);
@@ -318,7 +318,7 @@ fn working_status_is_recorded_but_hidden_from_indicator_and_list() {
     // Record a working session.
     let (_, _, code) = run(
         &state_dir,
-        &["set", "working"],
+        &["set", "working", "--agent", "claude-code"],
         Some(r#"{"session_id":"sess-work"}"#),
     );
     assert_eq!(code, 0);
@@ -339,7 +339,7 @@ fn working_status_is_recorded_but_hidden_from_indicator_and_list() {
     // A second session that's actually waiting *should* surface.
     let (_, _, code) = run(
         &state_dir,
-        &["set", "notify"],
+        &["set", "notify", "--agent", "claude-code"],
         Some(r#"{"session_id":"sess-wait"}"#),
     );
     assert_eq!(code, 0);
