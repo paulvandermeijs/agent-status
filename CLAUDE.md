@@ -71,11 +71,11 @@ Each AI coding agent we integrate with lives in its own file under `crates/agent
 4. Add unit tests for `extract_session_id` covering the four standard cases (valid id, missing field, empty string, invalid JSON) plus any field-name-specific edge cases (e.g. Cursor's `conversation_id` vs `session_id` switch on `sessionStart`).
 5. Document the agent's hook config in README.md alongside the existing Claude Code section.
 
-No changes to `state.rs` or `main.rs` should be needed for a typical new agent — `commands.rs` only changes to add the new `AgentName` branch in `build_extension`.
+No changes to `state.rs` or `main.rs` should be needed for a typical new agent — only `commands/agent_extension.rs` changes, to add the new `AgentName` branch in `build_extension`.
 
 Some agents (e.g. pi at `pi.dev`) don't have a shell-hook mechanism — their lifecycle events fire in-process inside the agent's runtime. For those, the Rust `Agent` impl is unchanged (it still reads JSON from stdin), but the integration ships an additional bridge file that runs inside the agent and shells out to `agent-status`. See `extensions/pi-coding-agent.ts` and the pi section of `README.md`. The `Agent::extract_session_id` contract still applies — the bridge constructs the JSON payload, so we control the field name.
 
-Agents that accept a per-launch file-argument (Claude Code's `--settings <file>`, pi's `-e <file>`) can be installed via a shell alias — `alias claude='claude --settings "$(agent-status agent-extension)"'`, `alias pi='pi -e "$(agent-status agent-extension --agent pi-coding-agent)"'`. The `agent-extension` subcommand calls `build_extension` in `commands.rs`, which takes an `AgentName` and returns an `ExtensionFile { filename, content }`. The match is exhaustive over `AgentName`, so adding a new variant requires a corresponding branch (the compiler enforces it). Each branch picks the right filename extension (`.json` / `.ts`) and the right content shape: Claude Code's JSON via `serde_json::json!`, the TypeScript bridges via `include_str!` from `extensions/<agent>.ts` plus a one-line substitution of the `BIN` constant. opencode's plugin loader is directory-based with no per-launch flag, so it's a `cp` install rather than an alias — same `build_extension` path. For TypeScript bridges, point at the corresponding `.ts` file under `extensions/` and rely on `TS_BIN_RESOLUTION_LINE` for the substitution.
+Agents that accept a per-launch file-argument (Claude Code's `--settings <file>`, pi's `-e <file>`) can be installed via a shell alias — `alias claude='claude --settings "$(agent-status agent-extension)"'`, `alias pi='pi -e "$(agent-status agent-extension --agent pi-coding-agent)"'`. The `agent-extension` subcommand calls `build_extension` in `commands/agent_extension.rs`, which takes an `AgentName` and returns an `ExtensionFile { filename, content }`. The match is exhaustive over `AgentName`, so adding a new variant requires a corresponding branch (the compiler enforces it). Each branch picks the right filename extension (`.json` / `.ts`) and the right content shape: Claude Code's JSON via `serde_json::json!`, the TypeScript bridges via `include_str!` from `extensions/<agent>.ts` plus a one-line substitution of the `BIN` constant. opencode's plugin loader is directory-based with no per-launch flag, so it's a `cp` install rather than an alias — same `build_extension` path. For TypeScript bridges, point at the corresponding `.ts` file under `extensions/` and rely on `TS_BIN_RESOLUTION_LINE` for the substitution.
 
 ## Wire compatibility
 
@@ -86,7 +86,7 @@ The `agent` field was added in the v0.2.0 refactor. It is non-optional in the cu
 The `pid` field was added later still and is also optional in the schema for the same reason — entries written by older binaries simply skip the PID-based auto-prune (`is_pid_alive` is only consulted when `pid` is `Some`).
 
 The `event` field has four documented values: `notify`, `done`, `working`,
-`idle`. The `needs_attention` helper in `commands.rs` is the single source of
+`idle`. The `needs_attention` helper in `commands/mod.rs` is the single source of
 truth for which values surface in the tmux status indicator and legacy fzf
 TSV — currently `notify` and `done`. `agent-switcher` ignores that filter
 and reads the store directly, so every row shows up there regardless of
