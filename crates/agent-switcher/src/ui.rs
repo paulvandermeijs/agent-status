@@ -10,9 +10,6 @@ use ratatui::{
 
 use crate::app::App;
 
-const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-const MESSAGE_CAP: usize = 80;
-
 pub fn draw(f: &mut Frame, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -125,6 +122,9 @@ fn one_line(s: &str) -> String {
         .trim()
         .to_string()
 }
+
+const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+const MESSAGE_CAP: usize = 80;
 
 #[cfg(test)]
 mod tests {
