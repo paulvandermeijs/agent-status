@@ -53,15 +53,16 @@ enum Cmd {
     /// Generate the agent's extension/settings file and print its path.
     ///
     /// Intended for use as a shell alias (Claude Code: `alias claude='claude
-    /// --settings "$(agent-status agent-extension)"'`; pi: `alias pi='pi -e
-    /// "$(agent-status agent-extension --agent pi-coding-agent)"'`). Writes
-    /// a fresh file (using the current `agent-status` binary's absolute path)
-    /// to `${XDG_RUNTIME_DIR:-/tmp}/agent-status/extensions/<agent>.<ext>`
-    /// and prints that path on stdout. Each agent emits the file type its
-    /// loader expects (`.json` for Claude Code, `.ts` for pi/opencode).
+    /// --settings "$(agent-status agent-extension --agent claude-code)"'`;
+    /// pi: `alias pi='pi -e "$(agent-status agent-extension --agent
+    /// pi-coding-agent)"'`). Writes a fresh file (using the current
+    /// `agent-status` binary's absolute path) to
+    /// `${XDG_RUNTIME_DIR:-/tmp}/agent-status/extensions/<agent>.<ext>` and
+    /// prints that path on stdout. Each agent emits the file type its loader
+    /// expects (`.json` for Claude Code, `.ts` for pi/opencode).
     AgentExtension {
         /// Identifier of the agent the extension file should target.
-        #[arg(long, default_value_t = AgentName::ClaudeCode, value_enum)]
+        #[arg(long, value_enum)]
         agent: AgentName,
     },
 }

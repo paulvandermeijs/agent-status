@@ -213,7 +213,11 @@ fn agent_extension_writes_file_and_prints_path() {
     let tmp = TempDir::new().unwrap();
     let state_dir = tmp.path().join("agent-status");
 
-    let (stdout, stderr, code) = run(&state_dir, &["agent-extension"], None);
+    let (stdout, stderr, code) = run(
+        &state_dir,
+        &["agent-extension", "--agent", "claude-code"],
+        None,
+    );
     assert_eq!(code, 0, "stderr: {stderr}");
 
     // The printed path should point at the settings file inside XDG_RUNTIME_DIR.

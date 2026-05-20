@@ -35,7 +35,7 @@ Both binaries land in `~/.cargo/bin`. As long as that's on your `$PATH` (Cargo's
 Drop this alias into your shell rc (`.zshrc`, `.bashrc`, etc.):
 
 ```sh
-alias claude='claude --settings "$(agent-status agent-extension)"'
+alias claude='claude --settings "$(agent-status agent-extension --agent claude-code)"'
 ```
 
 That's it. Each time you run `claude`, the alias expands so claude launches with `--settings <generated.json>` — a six-hook file that `agent-status` regenerates on every invocation from its own absolute path. Claude Code merges `--settings` on top of your user/project settings, so nothing you've already configured gets overwritten.
