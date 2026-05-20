@@ -3,6 +3,14 @@ name = "agent-status"
 version.workspace = true
 edition.workspace = true
 description = "Tmux-integrated indicator showing which AI coding agent sessions are waiting on user input."
+authors = ["Paul van der Meijs <vandermeijs@redkiwi.nl>"]
+license = "MIT"
+repository = "https://github.com/paulvandermeijs/agent-status"
+homepage = "https://github.com/paulvandermeijs/agent-status"
+documentation = "https://docs.rs/agent-status"
+readme = "README.md"
+keywords = ["tmux", "ai-agent", "claude-code", "status-bar", "hook"]
+categories = ["command-line-utilities", "development-tools"]
 
 [lints]
 workspace = true
