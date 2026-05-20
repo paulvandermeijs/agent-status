@@ -3,6 +3,13 @@ name = "agent-switcher"
 version.workspace = true
 edition.workspace = true
 description = "Tmux popup TUI for switching between waiting AI coding agent sessions."
+authors = ["Paul van der Meijs <vandermeijs@redkiwi.nl>"]
+license = "MIT"
+repository = "https://github.com/paulvandermeijs/agent-status"
+homepage = "https://github.com/paulvandermeijs/agent-status"
+readme = "README.md"
+keywords = ["tmux", "ai-agent", "claude-code", "tui", "ratatui"]
+categories = ["command-line-utilities"]
 
 [lints]
 workspace = true
@@ -12,7 +19,7 @@ name = "agent-switcher"
 path = "src/main.rs"
 
 [dependencies]
-agent-status = { path = "../agent-status" }
+agent-status = { path = "../agent-status", version = "1.0.0" }
 ratatui = "0.29"
 crossterm = "0.28"
 
