@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "agent-status"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "clap",
  "serde",
@@ -14,7 +14,7 @@ dependencies = [
 
 [[package]]
 name = "agent-switcher"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "agent-status",
  "crossterm",
