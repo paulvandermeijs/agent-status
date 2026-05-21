@@ -106,10 +106,20 @@ a one-line activity string (`format_pre_tool_use_activity` in
 `agents/claude_code.rs`) and stored as the entry's `message`, so the
 switcher's Activity column shows what the agent is doing in real time.
 
-pi and opencode do not yet emit `working` or `idle`; their hook semantics
-are unchanged. New event values should be added to the match in
-`needs_attention` and to the switcher's `match e.event.as_str()` block in
-`agent-switcher/src/ui.rs`.
+pi's bridge (`extensions/pi-coding-agent.ts`) mirrors this mapping:
+`session_start` → `idle`, `before_agent_start` and
+`tool_execution_start` → `working`, `agent_end` → `done`,
+`session_shutdown` → `clear`. Activity messages are formatted in the
+bridge (not the Rust side) because pi's tool input schemas live in
+TypeScript: `before_agent_start` uses the first line of the user
+prompt, `tool_execution_start` uses a `formatToolActivity` analogue of
+`format_pre_tool_use_activity` keyed by pi's lowercase tool names
+(bash/read/edit/write/grep/find/ls), and `agent_end` walks
+`event.messages` for the assistant's last `type: "text"` content.
+opencode does not yet emit `working` or `idle`; its hook semantics are
+unchanged. New event values should be added to the match in
+`needs_attention` and to the switcher's `match e.event.as_str()` block
+in `agent-switcher/src/ui.rs`.
 
 ## Dev / installed binary divergence
 
