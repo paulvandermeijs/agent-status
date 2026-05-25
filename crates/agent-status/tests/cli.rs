@@ -230,7 +230,7 @@ fn agent_extension_writes_file_and_prints_path() {
     let parsed: serde_json::Value = serde_json::from_str(&contents).expect("valid json");
     let hooks = parsed.get("hooks").expect("hooks key present");
     for event in [
-        "Notification",
+        "PermissionRequest",
         "Stop",
         "UserPromptSubmit",
         "PreToolUse",
@@ -239,6 +239,12 @@ fn agent_extension_writes_file_and_prints_path() {
     ] {
         assert!(hooks.get(event).is_some(), "missing hook event {event}");
     }
+    // Notification is intentionally absent — see comment in
+    // `build_claude_code_settings`.
+    assert!(
+        hooks.get("Notification").is_none(),
+        "should not subscribe to Notification (idle_prompt false-positive)",
+    );
 }
 
 #[test]

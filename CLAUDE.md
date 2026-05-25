@@ -121,9 +121,21 @@ Hook → event mapping for Claude Code (kept in
 - `SessionStart` → `idle` (placeholder so the switcher sees the session
   from the moment Claude launches, even before the first prompt)
 - `UserPromptSubmit`, `PreToolUse` → `working`
-- `Notification`, `PermissionRequest` → `notify`
+- `PermissionRequest` → `notify`
 - `Stop` → `done`
 - `SessionEnd` → `clear` (the only event that removes the row)
+
+`Notification` is intentionally NOT subscribed to even though it
+superficially looks like a `notify` source. Claude Code fires it for
+several matchers — `permission_prompt` (duplicates `PermissionRequest`,
+which fires first and is the canonical signal), `idle_prompt` (a
+periodic "Claude is waiting for your input" reminder fired on a timer),
+`auth_success`, `elicitation_*`, etc. Wiring `Notification → notify`
+caused freshly-cleared (`/clear`) sessions to flip back from `idle` to
+`notify` once the idle reminder timer fired. `PermissionRequest`'s
+payload carries `tool_name` + `tool_input`, so the activity-string
+synthesizer in `extract_message` produces a more specific message
+("Running: cargo test") than Notification's generic text would.
 
 For PreToolUse, the hook payload's `tool_name`/`tool_input` are turned into
 a one-line activity string (`format_pre_tool_use_activity` in

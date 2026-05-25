@@ -43,9 +43,16 @@ fn build_claude_code_settings(bin_path: &str) -> String {
     let set_idle = format!("{bin_path} set --agent claude-code idle");
     let clear = format!("{bin_path} clear --agent claude-code");
 
+    // Intentionally NOT subscribing to Claude Code's `Notification` hook:
+    // it fires for several matchers, including `idle_prompt` (a periodic
+    // "Claude is waiting for your input" reminder fired on a timer) and
+    // `permission_prompt` (which duplicates `PermissionRequest`). Wiring
+    // `Notification → notify` would spuriously flip a freshly-cleared
+    // (`/clear`) session back to `notify` after the idle reminder fires.
+    // `PermissionRequest` fires first for tool-permission gates and is
+    // the canonical, deterministic signal.
     let value = serde_json::json!({
         "hooks": {
-            "Notification":      [{"hooks": [{"type": "command", "command": &set_notify}]}],
             "PermissionRequest": [{"hooks": [{"type": "command", "command": set_notify}]}],
             "Stop":              [{"hooks": [{"type": "command", "command": set_done}]}],
             "UserPromptSubmit":  [{"hooks": [{"type": "command", "command": &set_working}]}],
@@ -96,7 +103,6 @@ mod tests {
     fn build_extension_claude_code_wires_all_hook_events() {
         let ext = build_extension("/x/agent-status", AgentName::ClaudeCode);
         for event in [
-            "Notification",
             "PermissionRequest",
             "Stop",
             "UserPromptSubmit",
@@ -106,6 +112,22 @@ mod tests {
         ] {
             assert!(ext.content.contains(event), "missing hook event {event}");
         }
+    }
+
+    #[test]
+    fn build_extension_claude_code_does_not_subscribe_to_notification() {
+        // Notification fires on a timer for `idle_prompt` ("Claude is
+        // waiting for your input"), which would spuriously flip a
+        // freshly-cleared (`/clear`) session from `idle` back to
+        // `notify`. PermissionRequest covers the legitimate permission
+        // case. See the comment in `build_claude_code_settings`.
+        let ext = build_extension("/x/agent-status", AgentName::ClaudeCode);
+        let parsed: serde_json::Value = serde_json::from_str(&ext.content).unwrap();
+        assert!(
+            parsed.pointer("/hooks/Notification").is_none(),
+            "should not subscribe to Notification; got: {}",
+            ext.content,
+        );
     }
 
     #[test]
@@ -125,9 +147,9 @@ mod tests {
         );
         let parsed: serde_json::Value = serde_json::from_str(&ext.content).unwrap();
         let command = parsed
-            .pointer("/hooks/Notification/0/hooks/0/command")
+            .pointer("/hooks/PermissionRequest/0/hooks/0/command")
             .and_then(serde_json::Value::as_str)
-            .expect("notification command string");
+            .expect("PermissionRequest command string");
         assert!(command.contains(r#"has"quote\and-backslash"#), "got: {command}");
     }
 
