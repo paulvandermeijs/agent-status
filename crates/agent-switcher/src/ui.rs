@@ -6,7 +6,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Cell, Paragraph, Row, Table},
+    widgets::{Block, BorderType, Borders, Cell, Paragraph, Row, Table},
 };
 
 use crate::app::{App, event_rank};
@@ -27,16 +27,12 @@ pub fn draw(f: &mut Frame, app: &App) {
 }
 
 fn filter_widget(filter: &str) -> Paragraph<'_> {
-    Paragraph::new(Line::from(vec![
-        Span::styled(
-            "> ",
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(filter),
-    ]))
-    .block(Block::default().borders(Borders::ALL).title("Filter"))
+    Paragraph::new(Line::from(vec![Span::raw("❯ "), Span::raw(filter)])).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_type(border_type())
+            .title(" Filter "),
+    )
 }
 
 fn sessions_table(app: &App) -> Table<'_> {
@@ -98,7 +94,12 @@ fn sessions_table(app: &App) -> Table<'_> {
             Row::new(vec!["", "Session", "Agent", "Activity"])
                 .style(Style::default().add_modifier(Modifier::BOLD)),
         )
-        .block(Block::default().borders(Borders::ALL).title("Sessions"))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(border_type())
+                .title(" Sessions "),
+        )
 }
 
 fn help_widget() -> Paragraph<'static> {
@@ -164,8 +165,40 @@ fn section_header_style(event: &Event) -> (&'static str, Color, Color) {
     }
 }
 
+/// Resolve the active border style for all bordered blocks. Reads
+/// `AGENT_SWITCHER_BORDER_TYPE` once and caches it; unrecognized or
+/// unset values fall back to `Plain`.
+fn border_type() -> BorderType {
+    use std::sync::OnceLock;
+    static CACHE: OnceLock<BorderType> = OnceLock::new();
+    *CACHE.get_or_init(|| {
+        std::env::var(BORDER_TYPE_ENV)
+            .ok()
+            .as_deref()
+            .and_then(parse_border_type)
+            .unwrap_or(BorderType::Plain)
+    })
+}
+
+fn parse_border_type(s: &str) -> Option<BorderType> {
+    match s.trim().to_ascii_lowercase().as_str() {
+        "plain" => Some(BorderType::Plain),
+        "rounded" => Some(BorderType::Rounded),
+        "double" => Some(BorderType::Double),
+        "thick" => Some(BorderType::Thick),
+        "quadrantinside" | "quadrant-inside" | "quadrant_inside" => {
+            Some(BorderType::QuadrantInside)
+        }
+        "quadrantoutside" | "quadrant-outside" | "quadrant_outside" => {
+            Some(BorderType::QuadrantOutside)
+        }
+        _ => None,
+    }
+}
+
 const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const MESSAGE_CAP: usize = 80;
+const BORDER_TYPE_ENV: &str = "AGENT_SWITCHER_BORDER_TYPE";
 
 #[cfg(test)]
 mod tests {
@@ -200,5 +233,41 @@ mod tests {
             section_header_style(&Event::Unknown("future".into())).0,
             "Other"
         );
+    }
+
+    #[test]
+    fn parse_border_type_known_values() {
+        assert_eq!(parse_border_type("plain"), Some(BorderType::Plain));
+        assert_eq!(parse_border_type("rounded"), Some(BorderType::Rounded));
+        assert_eq!(parse_border_type("double"), Some(BorderType::Double));
+        assert_eq!(parse_border_type("thick"), Some(BorderType::Thick));
+    }
+
+    #[test]
+    fn parse_border_type_is_case_insensitive_and_trims() {
+        assert_eq!(parse_border_type("  Rounded\n"), Some(BorderType::Rounded));
+        assert_eq!(parse_border_type("THICK"), Some(BorderType::Thick));
+    }
+
+    #[test]
+    fn parse_border_type_accepts_quadrant_synonyms() {
+        assert_eq!(
+            parse_border_type("quadrant_inside"),
+            Some(BorderType::QuadrantInside),
+        );
+        assert_eq!(
+            parse_border_type("quadrant-outside"),
+            Some(BorderType::QuadrantOutside),
+        );
+        assert_eq!(
+            parse_border_type("quadrantinside"),
+            Some(BorderType::QuadrantInside),
+        );
+    }
+
+    #[test]
+    fn parse_border_type_rejects_garbage() {
+        assert_eq!(parse_border_type(""), None);
+        assert_eq!(parse_border_type("nope"), None);
     }
 }

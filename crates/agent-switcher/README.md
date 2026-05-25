@@ -8,7 +8,7 @@ pane.
 
 ```
 ┌─ Filter ─────────────────────────────────────────────────────────────┐
-│ >                                                                    │
+│ ❯                                                                    │
 └──────────────────────────────────────────────────────────────────────┘
 ┌─ Sessions ───────────────────────────────────────────────────────────┐
 │    Session                 Agent           Activity                  │
@@ -94,6 +94,13 @@ The marker column:
 - `⠋` (spinner, cyan) — `working`: agent is mid-turn.
 - First char of the event name (white) — any future event type the binary
   doesn't yet recognize, bucketed under the **Other** banner.
+
+## Customization
+
+Set `AGENT_SWITCHER_BORDER_TYPE` to change the border style around the Filter
+and Sessions boxes. Accepted values (case-insensitive): `plain` (default),
+`rounded`, `double`, `thick`, `quadrant-inside`, `quadrant-outside`.
+Unrecognized values fall back to `plain`.
 
 ## Dependency on `agent-status`
 
