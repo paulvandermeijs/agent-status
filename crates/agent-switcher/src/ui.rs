@@ -131,7 +131,7 @@ fn one_line(s: &str) -> String {
 }
 
 /// Build a non-selectable row that labels the start of an event group
-/// (Notify / Done / Idle / Working / Other). The whole row is painted
+/// (Needs your attention / Done / Idle / Working / Other). The whole row is painted
 /// with the group's color as a background so the section break reads
 /// as a banner; the foreground is picked for contrast against it.
 fn section_header_row(event: &Event) -> Row<'static> {
@@ -156,7 +156,7 @@ fn section_header_row(event: &Event) -> Row<'static> {
 /// indicator so the two roles can't be confused.
 fn section_header_style(event: &Event) -> (&'static str, Color, Color) {
     match event {
-        Event::Notify => ("Notify", Color::Yellow, Color::Black),
+        Event::Notify => ("Needs your attention", Color::Yellow, Color::Black),
         Event::Done => ("Done", Color::Green, Color::Black),
         Event::Idle => ("Idle", Color::Gray, Color::Black),
         Event::Working => ("Working", Color::Cyan, Color::Black),
@@ -192,7 +192,7 @@ mod tests {
 
     #[test]
     fn section_header_label_matches_event_variant() {
-        assert_eq!(section_header_style(&Event::Notify).0, "Notify");
+        assert_eq!(section_header_style(&Event::Notify).0, "Needs your attention");
         assert_eq!(section_header_style(&Event::Done).0, "Done");
         assert_eq!(section_header_style(&Event::Idle).0, "Idle");
         assert_eq!(section_header_style(&Event::Working).0, "Working");

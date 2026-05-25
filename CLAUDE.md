@@ -107,7 +107,7 @@ as the within-group tiebreaker that matches `StateStore::list`'s order.
 The sort lives in `app::sort_by_priority` and is applied both in
 `App::new` and on every `App::tick` so the order is stable after each
 state-directory refresh. A non-selectable bold section header (labels:
-`Notify` / `Done` / `Idle` / `Working` / `Other`) is rendered before
+`Needs your attention` / `Done` / `Idle` / `Working` / `Other`) is rendered before
 the first row of each non-empty group; empty groups produce no header.
 The group transitions are detected in `ui::sessions_table` by calling
 `app::event_rank` — the single source of truth shared with the sort,
