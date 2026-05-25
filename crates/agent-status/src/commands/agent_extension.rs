@@ -51,12 +51,22 @@ fn build_claude_code_settings(bin_path: &str) -> String {
     // (`/clear`) session back to `notify` after the idle reminder fires.
     // `PermissionRequest` fires first for tool-permission gates and is
     // the canonical, deterministic signal.
+    // `PostToolUse` closes the post-approval gap: after a `PermissionRequest`
+    // is approved, Claude Code emits no hook for the approval itself. Without
+    // `PostToolUse → working` the row would stay stuck at `notify` until the
+    // next `PreToolUse` or `Stop` — which can be many seconds away if the
+    // agent is just thinking. `PostToolUse` fires for every tool call (not
+    // just permission-gated ones), so it's a no-op transition in the normal
+    // case and a fix in the approved-permission case. A denied permission
+    // does not fire `PostToolUse`, so the row legitimately stays at `notify`
+    // until the agent retries (next `PreToolUse`) or gives up (`Stop`).
     let value = serde_json::json!({
         "hooks": {
             "PermissionRequest": [{"hooks": [{"type": "command", "command": set_notify}]}],
             "Stop":              [{"hooks": [{"type": "command", "command": set_done}]}],
             "UserPromptSubmit":  [{"hooks": [{"type": "command", "command": &set_working}]}],
-            "PreToolUse":        [{"hooks": [{"type": "command", "command": set_working}]}],
+            "PreToolUse":        [{"hooks": [{"type": "command", "command": &set_working}]}],
+            "PostToolUse":       [{"hooks": [{"type": "command", "command": set_working}]}],
             "SessionStart":      [{"hooks": [{"type": "command", "command": set_idle}]}],
             "SessionEnd":        [{"hooks": [{"type": "command", "command": clear}]}],
         }
@@ -107,6 +117,7 @@ mod tests {
             "Stop",
             "UserPromptSubmit",
             "PreToolUse",
+            "PostToolUse",
             "SessionStart",
             "SessionEnd",
         ] {
@@ -233,6 +244,24 @@ mod tests {
             .pointer("/hooks/PreToolUse/0/hooks/0/command")
             .and_then(serde_json::Value::as_str)
             .expect("PreToolUse command");
+        assert!(
+            cmd.contains("set --agent claude-code working"),
+            "got: {cmd}",
+        );
+    }
+
+    #[test]
+    fn build_extension_claude_code_post_tool_use_sets_working() {
+        // PostToolUse fires after every tool call (including those gated by
+        // PermissionRequest). It transitions the row out of `notify` once
+        // an approved tool finishes, since Claude Code emits no hook for
+        // permission approval itself.
+        let ext = build_extension("/path/agent-status", AgentName::ClaudeCode);
+        let parsed: serde_json::Value = serde_json::from_str(&ext.content).unwrap();
+        let cmd = parsed
+            .pointer("/hooks/PostToolUse/0/hooks/0/command")
+            .and_then(serde_json::Value::as_str)
+            .expect("PostToolUse command");
         assert!(
             cmd.contains("set --agent claude-code working"),
             "got: {cmd}",

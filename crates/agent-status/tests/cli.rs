@@ -234,6 +234,7 @@ fn agent_extension_writes_file_and_prints_path() {
         "Stop",
         "UserPromptSubmit",
         "PreToolUse",
+        "PostToolUse",
         "SessionStart",
         "SessionEnd",
     ] {
