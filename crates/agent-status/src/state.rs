@@ -1,7 +1,99 @@
+use serde::de::{self, Deserializer};
+use serde::ser::Serializer;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io;
 use std::path::PathBuf;
+
+/// Lifecycle state the producing hook reported for a session.
+///
+/// On the wire this is a plain JSON string — the four known values
+/// (`notify`, `done`, `working`, `idle`) round-trip through their named
+/// variants, and anything else is preserved verbatim in `Unknown(String)`
+/// so new hook event types added by future agents don't break older
+/// binaries. The variant order matches the switcher's display priority
+/// (most-attention-needing first): `Notify`, `Done`, `Idle`, `Working`,
+/// `Unknown`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Event {
+    /// Agent explicitly signals the user (Claude Code `Notification` /
+    /// `PermissionRequest`, pi `before_user_input` analogues).
+    Notify,
+    /// Agent just finished a turn (Claude Code `Stop`, pi `agent_end`).
+    Done,
+    /// Session is alive but not interacting (Claude Code `SessionStart`
+    /// placeholder, pi `session_start`).
+    Idle,
+    /// Agent is in the middle of working — typing, calling tools
+    /// (Claude Code `UserPromptSubmit` / `PreToolUse`, pi
+    /// `before_agent_start` / `tool_execution_start`).
+    Working,
+    /// Forward-compat: a hook reported an event string we don't recognize.
+    /// Kept verbatim so re-serialization is lossless.
+    Unknown(String),
+}
+
+impl Event {
+    /// Borrow this event as the wire string the hooks use.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Notify => "notify",
+            Self::Done => "done",
+            Self::Idle => "idle",
+            Self::Working => "working",
+            Self::Unknown(s) => s.as_str(),
+        }
+    }
+
+    /// Whether this event represents a session asking for the user's eyes
+    /// right now. `Notify` is an explicit "blocked on you" signal; `Done`
+    /// is the just-finished state the next prompt will move on from. Any
+    /// future / unknown event value is treated as attention-worthy so a
+    /// new hook type added by an agent does not silently disappear from
+    /// the tmux indicator. `Working` and `Idle` are alive-but-not-asking.
+    #[must_use]
+    pub fn needs_attention(&self) -> bool {
+        !matches!(self, Self::Working | Self::Idle)
+    }
+}
+
+impl From<&str> for Event {
+    fn from(s: &str) -> Self {
+        match s {
+            "notify" => Self::Notify,
+            "done" => Self::Done,
+            "idle" => Self::Idle,
+            "working" => Self::Working,
+            _ => Self::Unknown(s.to_string()),
+        }
+    }
+}
+
+impl From<String> for Event {
+    fn from(s: String) -> Self {
+        match s.as_str() {
+            "notify" => Self::Notify,
+            "done" => Self::Done,
+            "idle" => Self::Idle,
+            "working" => Self::Working,
+            _ => Self::Unknown(s),
+        }
+    }
+}
+
+impl Serialize for Event {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for Event {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(d).map_err(de::Error::custom)?;
+        Ok(Self::from(s))
+    }
+}
 
 /// One entry stored per active agent session that is waiting on user attention.
 ///
@@ -16,8 +108,8 @@ pub struct AttentionEntry {
     pub project: String,
     /// Absolute path of the project directory at the time the hook fired.
     pub cwd: String,
-    /// Hook event label, for example `notify` or `done`.
-    pub event: String,
+    /// Hook event the producing agent reported.
+    pub event: Event,
     /// Tmux pane id (such as `%17`), or empty if the hook fired outside tmux.
     pub tmux_pane: String,
     /// Unix timestamp (seconds) when the entry was written.
@@ -206,7 +298,7 @@ mod tests {
             agent: "claude-code".into(),
             project: "claude-status".into(),
             cwd: "/Users/x/work/claude-status".into(),
-            event: "notify".into(),
+            event: Event::Notify,
             tmux_pane: "%42".into(),
             ts: 1_700_000_000,
             message: None,
@@ -218,12 +310,49 @@ mod tests {
     }
 
     #[test]
+    fn event_known_values_serialize_as_plain_strings() {
+        for (evt, wire) in [
+            (Event::Notify, "\"notify\""),
+            (Event::Done, "\"done\""),
+            (Event::Idle, "\"idle\""),
+            (Event::Working, "\"working\""),
+        ] {
+            assert_eq!(serde_json::to_string(&evt).unwrap(), wire);
+            let parsed: Event = serde_json::from_str(wire).unwrap();
+            assert_eq!(parsed, evt);
+        }
+    }
+
+    #[test]
+    fn event_unknown_value_roundtrips_verbatim() {
+        // Forward compat: a future agent emitting a new event string must
+        // deserialize cleanly and re-serialize without losing the original
+        // text, so a mixed-version setup doesn't silently rewrite state.
+        let json = r#""compacting""#;
+        let parsed: Event = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed, Event::Unknown("compacting".to_string()));
+        assert_eq!(serde_json::to_string(&parsed).unwrap(), json);
+    }
+
+    #[test]
+    fn event_needs_attention_matches_legacy_filter() {
+        // notify + done + Unknown(future event) → surface in tmux/list;
+        // working + idle → hide. This is the contract the bash precursor
+        // and the v0.2.0+ binary share.
+        assert!(Event::Notify.needs_attention());
+        assert!(Event::Done.needs_attention());
+        assert!(Event::Unknown("anything-new".into()).needs_attention());
+        assert!(!Event::Working.needs_attention());
+        assert!(!Event::Idle.needs_attention());
+    }
+
+    #[test]
     fn entry_matches_bash_plan_field_names() {
         let entry = AttentionEntry {
             agent: "claude-code".into(),
             project: "p".into(),
             cwd: "/c".into(),
-            event: "done".into(),
+            event: Event::Done,
             tmux_pane: "%1".into(),
             ts: 1,
             message: None,
@@ -245,7 +374,7 @@ mod tests {
             agent: "claude-code".into(),
             project: project.into(),
             cwd: format!("/x/{project}"),
-            event: "notify".into(),
+            event: Event::Notify,
             tmux_pane: "%1".into(),
             ts: 1,
             message: None,
@@ -324,7 +453,7 @@ mod tests {
             agent: "claude-code".into(),
             project: "p".into(),
             cwd: "/c".into(),
-            event: "notify".into(),
+            event: Event::Notify,
             tmux_pane: "%1".into(),
             ts: 1,
             message: Some("Permission required".into()),
@@ -342,7 +471,7 @@ mod tests {
             agent: "claude-code".into(),
             project: "p".into(),
             cwd: "/c".into(),
-            event: "done".into(),
+            event: Event::Done,
             tmux_pane: "%1".into(),
             ts: 1,
             message: None,
@@ -358,7 +487,7 @@ mod tests {
             agent: "claude-code".into(),
             project: "p".into(),
             cwd: "/c".into(),
-            event: "notify".into(),
+            event: Event::Notify,
             tmux_pane: "%1".into(),
             ts: 1,
             message: None,
@@ -376,7 +505,7 @@ mod tests {
             agent: "claude-code".into(),
             project: "p".into(),
             cwd: "/c".into(),
-            event: "done".into(),
+            event: Event::Done,
             tmux_pane: "%1".into(),
             ts: 1,
             message: None,

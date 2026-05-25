@@ -8,4 +8,4 @@ pub use agents::{Agent, by_name};
 pub use commands::{
     build_entry, build_extension, format_list, format_status, ExtensionFile,
 };
-pub use state::{AttentionEntry, StateStore};
+pub use state::{AttentionEntry, Event, StateStore};

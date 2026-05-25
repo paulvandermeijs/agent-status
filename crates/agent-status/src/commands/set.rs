@@ -1,11 +1,14 @@
-use crate::state::AttentionEntry;
+use crate::state::{AttentionEntry, Event};
 use std::path::Path;
 
 /// Construct an [`AttentionEntry`] from raw inputs.
 ///
 /// `project` is derived as the basename of `cwd`. When `cwd` has no basename (e.g. `/`
-/// or empty string), `project` falls back to `cwd` itself. `message` is the agent's
-/// last-response text, when the hook payload supplies one; pass `None` otherwise.
+/// or empty string), `project` falls back to `cwd` itself. `event` is parsed via
+/// [`Event::from`]: known names (`notify`/`done`/`working`/`idle`) become named
+/// variants, anything else is preserved as [`Event::Unknown`]. `message` is the
+/// agent's last-response text when the hook payload supplies one; pass `None`
+/// otherwise.
 pub fn build_entry(
     agent: &str,
     event: &str,
@@ -22,7 +25,7 @@ pub fn build_entry(
         agent: agent.to_string(),
         project,
         cwd: cwd.to_string(),
-        event: event.to_string(),
+        event: Event::from(event),
         tmux_pane: tmux_pane.to_string(),
         ts,
         message: message.map(str::to_string),
@@ -40,10 +43,16 @@ mod tests {
         assert_eq!(e.agent, "claude-code");
         assert_eq!(e.project, "claude-status");
         assert_eq!(e.cwd, "/Users/me/work/claude-status");
-        assert_eq!(e.event, "notify");
+        assert_eq!(e.event, Event::Notify);
         assert_eq!(e.tmux_pane, "%5");
         assert_eq!(e.ts, 42);
         assert!(e.message.is_none());
+    }
+
+    #[test]
+    fn build_entry_parses_unknown_event_into_unknown_variant() {
+        let e = build_entry("claude-code", "future-event", "/x", "", 0, None, None);
+        assert_eq!(e.event, Event::Unknown("future-event".to_string()));
     }
 
     #[test]

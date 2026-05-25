@@ -1,5 +1,6 @@
 //! Ratatui rendering. Pure function of `&App`; called from the event loop.
 
+use agent_status::Event;
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout},
@@ -8,7 +9,7 @@ use ratatui::{
     widgets::{Block, Borders, Cell, Paragraph, Row, Table},
 };
 
-use crate::app::App;
+use crate::app::{App, event_rank};
 
 pub fn draw(f: &mut Frame, app: &App) {
     let chunks = Layout::default()
@@ -43,37 +44,47 @@ fn sessions_table(app: &App) -> Table<'_> {
     let spinner_idx = usize::try_from(app.tick).unwrap_or(0) % SPINNER_FRAMES.len();
     let spinner = SPINNER_FRAMES[spinner_idx];
 
-    let rows: Vec<Row<'_>> = visible
-        .iter()
-        .enumerate()
-        .map(|(view_idx, &entries_idx)| {
-            let (sid, e) = &app.entries[entries_idx];
-            let (status_text, status_color) = match e.event.as_str() {
-                "working" => (spinner.to_string(), Color::Cyan),
-                "notify" => ("!".to_string(), Color::Yellow),
-                "done" => ("✓".to_string(), Color::Green),
-                "idle" => ("·".to_string(), Color::DarkGray),
-                other => (other.chars().next().unwrap_or('?').to_string(), Color::Gray),
-            };
-            let session = display_session(sid, &e.project);
-            let snippet = e.message.as_deref().map(one_line).unwrap_or_default();
-            let mut row = Row::new(vec![
-                Cell::from(status_text).style(Style::default().fg(status_color)),
-                Cell::from(session),
-                Cell::from(e.agent.clone()),
-                Cell::from(snippet),
-            ]);
-            if view_idx == app.selected {
-                row = row.style(
-                    Style::default()
-                        .bg(Color::DarkGray)
-                        .fg(Color::White)
-                        .add_modifier(Modifier::BOLD),
-                );
-            }
-            row
-        })
-        .collect();
+    let mut rows: Vec<Row<'_>> = Vec::with_capacity(visible.len() + 4);
+    let mut current_group: Option<u8> = None;
+    for (view_idx, &entries_idx) in visible.iter().enumerate() {
+        let (sid, e) = &app.entries[entries_idx];
+        let rank = event_rank(&e.event);
+        if Some(rank) != current_group {
+            rows.push(section_header_row(&e.event));
+            current_group = Some(rank);
+        }
+        let (status_text, status_color) = match &e.event {
+            Event::Working => (spinner.to_string(), Color::Cyan),
+            Event::Notify => ("!".to_string(), Color::Yellow),
+            Event::Done => ("✓".to_string(), Color::Green),
+            Event::Idle => ("·".to_string(), Color::Gray),
+            Event::Unknown(s) => (s.chars().next().unwrap_or('?').to_string(), Color::Gray),
+        };
+        let session = display_session(sid, &e.project);
+        let snippet = e.message.as_deref().map(one_line).unwrap_or_default();
+        let mut row = Row::new(vec![
+            Cell::from(status_text).style(Style::default().fg(status_color)),
+            Cell::from(session),
+            Cell::from(e.agent.clone()),
+            Cell::from(snippet),
+        ]);
+        if view_idx == app.selected {
+            // Bright-black (ANSI 8) fill — the neutral counterpart to
+            // Idle's bright-white banner. Distinct from every section
+            // background (Yellow / Green / White / Cyan / Gray) and
+            // hueless so the selection doesn't compete with the
+            // group-color story. Ratatui composes row bg with each
+            // cell's own fg, so the status glyph keeps its event
+            // color while the rest of the row gets white-on-darkgray.
+            row = row.style(
+                Style::default()
+                    .bg(Color::DarkGray)
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD),
+            );
+        }
+        rows.push(row);
+    }
 
     let widths = [
         Constraint::Length(2),
@@ -84,18 +95,14 @@ fn sessions_table(app: &App) -> Table<'_> {
 
     Table::new(rows, widths)
         .header(
-            Row::new(vec!["", "Session", "Agent", "Activity"]).style(
-                Style::default()
-                    .fg(Color::DarkGray)
-                    .add_modifier(Modifier::BOLD),
-            ),
+            Row::new(vec!["", "Session", "Agent", "Activity"])
+                .style(Style::default().add_modifier(Modifier::BOLD)),
         )
         .block(Block::default().borders(Borders::ALL).title("Sessions"))
 }
 
 fn help_widget() -> Paragraph<'static> {
     Paragraph::new("Ctrl-N/P or ↓/↑: navigate · Enter: switch pane · Esc / Ctrl-C: cancel")
-        .style(Style::default().fg(Color::DarkGray))
 }
 
 fn display_session(session_id: &str, project: &str) -> String {
@@ -123,6 +130,40 @@ fn one_line(s: &str) -> String {
         .to_string()
 }
 
+/// Build a non-selectable row that labels the start of an event group
+/// (Notify / Done / Idle / Working / Other). The whole row is painted
+/// with the group's color as a background so the section break reads
+/// as a banner; the foreground is picked for contrast against it.
+fn section_header_row(event: &Event) -> Row<'static> {
+    let (label, bg, fg) = section_header_style(event);
+    Row::new(vec![
+        Cell::from(""),
+        Cell::from(label),
+        Cell::from(""),
+        Cell::from(""),
+    ])
+    .style(
+        Style::default()
+            .bg(bg)
+            .fg(fg)
+            .add_modifier(Modifier::BOLD),
+    )
+}
+
+/// Label, background color, and contrasting foreground for each event
+/// group's header banner. Every banner uses a light/saturated background
+/// with black foreground; `DarkGray` is reserved for the selection
+/// indicator so the two roles can't be confused.
+fn section_header_style(event: &Event) -> (&'static str, Color, Color) {
+    match event {
+        Event::Notify => ("Notify", Color::Yellow, Color::Black),
+        Event::Done => ("Done", Color::Green, Color::Black),
+        Event::Idle => ("Idle", Color::Gray, Color::Black),
+        Event::Working => ("Working", Color::Cyan, Color::Black),
+        Event::Unknown(_) => ("Other", Color::White, Color::Black),
+    }
+}
+
 const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const MESSAGE_CAP: usize = 80;
 
@@ -147,5 +188,17 @@ mod tests {
     fn display_session_truncates_session_id_to_eight_chars() {
         let out = display_session("abcdef-1234-very-long-session-id", "alpha");
         assert_eq!(out, "alpha (abcdef-1)");
+    }
+
+    #[test]
+    fn section_header_label_matches_event_variant() {
+        assert_eq!(section_header_style(&Event::Notify).0, "Notify");
+        assert_eq!(section_header_style(&Event::Done).0, "Done");
+        assert_eq!(section_header_style(&Event::Idle).0, "Idle");
+        assert_eq!(section_header_style(&Event::Working).0, "Working");
+        assert_eq!(
+            section_header_style(&Event::Unknown("future".into())).0,
+            "Other"
+        );
     }
 }

@@ -3,7 +3,7 @@
 //! The `tick` method reads `StateStore`, so it's exercised in integration
 //! tests; everything else (key handling, filter, selection clamping) is pure.
 
-use agent_status::{AttentionEntry, StateStore};
+use agent_status::{AttentionEntry, Event, StateStore};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::filter::{FilterRow, matches};
@@ -30,7 +30,8 @@ pub struct App {
 impl App {
     #[must_use]
     pub fn new(store: StateStore) -> Self {
-        let entries = store.list().unwrap_or_default();
+        let mut entries = store.list().unwrap_or_default();
+        sort_by_priority(&mut entries);
         Self {
             store,
             entries,
@@ -45,6 +46,7 @@ impl App {
     pub fn tick(&mut self) {
         self.tick = self.tick.wrapping_add(1);
         self.entries = self.store.list().unwrap_or_default();
+        sort_by_priority(&mut self.entries);
         self.clamp_selection();
     }
 
@@ -138,6 +140,33 @@ impl App {
     }
 }
 
+/// Sort the rows the way the switcher displays them: by event priority
+/// (`Notify` → `Done` → `Idle` → `Working` → `Unknown`), with the existing
+/// `ts` (then `session_id`) order from `StateStore::list` preserved as the
+/// tiebreaker within each group. The user reads top-down, so the most
+/// attention-needing entries land at the top of the table.
+fn sort_by_priority(entries: &mut [(String, AttentionEntry)]) {
+    entries.sort_by(|a, b| {
+        event_rank(&a.1.event)
+            .cmp(&event_rank(&b.1.event))
+            .then_with(|| a.1.ts.cmp(&b.1.ts))
+            .then_with(|| a.0.cmp(&b.0))
+    });
+}
+
+/// Display-order rank used for both the in-place sort and the
+/// section-header transitions in `ui.rs`. Lower = earlier on screen.
+/// Single source of truth so the two callers can't drift.
+pub(crate) fn event_rank(event: &Event) -> u8 {
+    match event {
+        Event::Notify => 0,
+        Event::Done => 1,
+        Event::Idle => 2,
+        Event::Working => 3,
+        Event::Unknown(_) => 4,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -149,7 +178,7 @@ mod tests {
             agent: "claude-code".into(),
             project: project.into(),
             cwd: format!("/x/{project}"),
-            event: event.into(),
+            event: agent_status::Event::from(event),
             tmux_pane: "%1".into(),
             ts: 1,
             message: None,
@@ -260,5 +289,49 @@ mod tests {
         let before = app.tick;
         app.tick();
         assert_eq!(app.tick, before.wrapping_add(1));
+    }
+
+    #[test]
+    fn entries_are_grouped_by_event_priority() {
+        // Notify → Done → Idle → Working → Unknown, with ts as the
+        // tiebreaker (matching StateStore::list's existing order).
+        let dir = TempDir::new().unwrap();
+        let store = StateStore::new(dir.path().to_path_buf());
+        // Write entries in deliberately-mixed order. Same ts so the
+        // grouping has to come from the event rank alone.
+        for (sid, event) in [
+            ("s-working", "working"),
+            ("s-notify", "notify"),
+            ("s-unknown", "compacting"),
+            ("s-idle", "idle"),
+            ("s-done", "done"),
+        ] {
+            store.write(sid, &sample(sid, event)).unwrap();
+        }
+        let _ = Box::leak(Box::new(dir));
+        let app = App::new(store);
+        let order: Vec<&str> = app.entries.iter().map(|(sid, _)| sid.as_str()).collect();
+        assert_eq!(
+            order,
+            vec!["s-notify", "s-done", "s-idle", "s-working", "s-unknown"]
+        );
+    }
+
+    #[test]
+    fn ts_breaks_ties_within_an_event_group() {
+        // Two notify entries — the older one should come first within the
+        // notify group (matches the legacy StateStore::list order).
+        let dir = TempDir::new().unwrap();
+        let store = StateStore::new(dir.path().to_path_buf());
+        let mut first = sample("old", "notify");
+        first.ts = 1;
+        let mut second = sample("new", "notify");
+        second.ts = 2;
+        store.write("s-newer", &second).unwrap();
+        store.write("s-older", &first).unwrap();
+        let _ = Box::leak(Box::new(dir));
+        let app = App::new(store);
+        let listed: Vec<&str> = app.entries.iter().map(|(sid, _)| sid.as_str()).collect();
+        assert_eq!(listed, vec!["s-older", "s-newer"]);
     }
 }

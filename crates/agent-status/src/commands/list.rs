@@ -1,5 +1,4 @@
-use super::needs_attention;
-use crate::state::AttentionEntry;
+use crate::state::{AttentionEntry, Event};
 
 /// Format the popup picker output: `session_id<TAB>pane<TAB>display\n` per entry.
 ///
@@ -16,7 +15,7 @@ pub fn format_list(entries: &[(String, AttentionEntry)]) -> String {
 
     let visible: Vec<&(String, AttentionEntry)> = entries
         .iter()
-        .filter(|(_, e)| needs_attention(&e.event))
+        .filter(|(_, e)| e.event.needs_attention())
         .collect();
     if visible.is_empty() {
         return String::new();
@@ -35,7 +34,7 @@ pub fn format_list(entries: &[(String, AttentionEntry)]) -> String {
 
     let mut out = String::new();
     for (sid, e) in &visible {
-        let marker = if e.event == "notify" { "[!]" } else { "[*]" };
+        let marker = if e.event == Event::Notify { "[!]" } else { "[*]" };
         let project = truncate_chars(&e.project, PROJECT_CAP);
         let agent = truncate_chars(&e.agent, AGENT_CAP);
         let snippet = e
@@ -87,7 +86,7 @@ mod tests {
             agent: "claude-code".into(),
             project: project.into(),
             cwd: format!("/x/{project}"),
-            event: event.into(),
+            event: Event::from(event),
             tmux_pane: pane.into(),
             ts: 1,
             message: None,

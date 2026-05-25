@@ -12,11 +12,15 @@ pane.
 └──────────────────────────────────────────────────────────────────────┘
 ┌─ Sessions ───────────────────────────────────────────────────────────┐
 │    Session                 Agent           Activity                  │
+│    Notify                                                            │
 │  ! agent-status (53fabd56) claude-code     Claude needs permission   │
-│  ⠋ playground   (9b73ed57) claude-code     Reading src/main.rs       │
-│  · scratch      (4012a1cd) opencode                                  │
-│  ⠋ infra        (8f1ade22) pi-coding-agent Editing terraform/main.tf │
+│    Done                                                              │
 │  ✓ docs         (1f33ccee) claude-code     Wrote 4 files             │
+│    Idle                                                              │
+│  · scratch      (4012a1cd) opencode                                  │
+│    Working                                                           │
+│  ⠋ playground   (9b73ed57) claude-code     Reading src/main.rs       │
+│  ⠋ infra        (8f1ade22) pi-coding-agent Editing terraform/main.tf │
 └──────────────────────────────────────────────────────────────────────┘
  Ctrl-N/P or ↓/↑: navigate · Enter: switch pane · Esc / Ctrl-C: cancel
 ```
@@ -67,6 +71,11 @@ just sessions waiting on your attention. That makes the popup useful as a
 general session jumper, while the [`agent-status`][status] tmux indicator stays
 focused on "needs you now" sessions.
 
+Rows are grouped under colored section banners in the order **Notify → Done →
+Idle → Working → Other**, with the most-attention-needing group at the top.
+Empty groups produce no banner. Within a group, rows are sorted by the
+timestamp the hook last fired.
+
 The activity column:
 
 - While Claude Code is working: shows the active tool — e.g.
@@ -78,11 +87,13 @@ The activity column:
 
 The marker column:
 
-- `⠋` (spinner, cyan) — `working`: agent is mid-turn.
 - `!` (yellow) — `notify`: agent is blocked on you (permission / input prompt).
 - `✓` (green) — `done`: agent finished a turn.
-- `·` (dim) — `idle`: session is alive but no prompt has arrived yet
+- `·` (gray) — `idle`: session is alive but no prompt has arrived yet
   (placeholder so the row is visible from `SessionStart`).
+- `⠋` (spinner, cyan) — `working`: agent is mid-turn.
+- First char of the event name (white) — any future event type the binary
+  doesn't yet recognize, bucketed under the **Other** banner.
 
 ## Dependency on `agent-status`
 

@@ -19,7 +19,7 @@ name = "agent-switcher"
 path = "src/main.rs"
 
 [dependencies]
-agent-status = { path = "../agent-status", version = "1.0.2" }
+agent-status = { path = "../agent-status", version = "1.1.0" }
 ratatui = "0.29"
 crossterm = "0.28"
 

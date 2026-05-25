@@ -1,4 +1,3 @@
-use super::needs_attention;
 use crate::state::AttentionEntry;
 
 /// Format the tmux `status-right` line for the given entries.
@@ -10,7 +9,7 @@ use crate::state::AttentionEntry;
 pub fn format_status(entries: &[(String, AttentionEntry)]) -> Option<String> {
     let waiting: Vec<&AttentionEntry> = entries
         .iter()
-        .filter(|(_, e)| needs_attention(&e.event))
+        .filter(|(_, e)| e.event.needs_attention())
         .map(|(_, e)| e)
         .collect();
     match waiting.len() {
@@ -23,13 +22,14 @@ pub fn format_status(entries: &[(String, AttentionEntry)]) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::state::Event;
 
     fn entry(project: &str, pane: &str, event: &str) -> AttentionEntry {
         AttentionEntry {
             agent: "claude-code".into(),
             project: project.into(),
             cwd: format!("/x/{project}"),
-            event: event.into(),
+            event: Event::from(event),
             tmux_pane: pane.into(),
             ts: 1,
             message: None,

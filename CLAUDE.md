@@ -85,12 +85,36 @@ The `agent` field was added in the v0.2.0 refactor. It is non-optional in the cu
 
 The `pid` field was added later still and is also optional in the schema for the same reason — entries written by older binaries simply skip the PID-based auto-prune (`is_pid_alive` is only consulted when `pid` is `Some`).
 
-The `event` field has four documented values: `notify`, `done`, `working`,
-`idle`. The `needs_attention` helper in `commands/mod.rs` is the single source of
-truth for which values surface in the tmux status indicator and legacy fzf
-TSV — currently `notify` and `done`. `agent-switcher` ignores that filter
-and reads the store directly, so every row shows up there regardless of
-event value.
+The `event` field is the `state::Event` enum: `Notify`, `Done`, `Working`,
+`Idle`, plus `Unknown(String)` for forward compat. On the wire it
+serializes as a plain lowercase string (`"notify"`, `"done"`, …) via a
+hand-written Serialize/Deserialize, so the on-disk JSON shape and the
+bash precursor's vocabulary are unchanged. Unrecognized event strings
+deserialize to `Event::Unknown(s)` and re-serialize verbatim, so a new
+hook event added by a future agent does not break older binaries that
+read the same state directory. `Event::needs_attention` (on the enum
+itself, not a free function) is the single source of truth for which
+values surface in the tmux status indicator and legacy fzf
+TSV — currently everything except `Working` and `Idle`, which means
+`Unknown` is surfaced by default (better to over-report than silently
+hide a new event type). `agent-switcher` ignores that filter and reads
+the store directly, so every row shows up there regardless of event
+value.
+
+The switcher groups rows by event priority for display: `Notify` →
+`Done` → `Idle` → `Working` → `Unknown`, with `ts` (then `session_id`)
+as the within-group tiebreaker that matches `StateStore::list`'s order.
+The sort lives in `app::sort_by_priority` and is applied both in
+`App::new` and on every `App::tick` so the order is stable after each
+state-directory refresh. A non-selectable bold section header (labels:
+`Notify` / `Done` / `Idle` / `Working` / `Other`) is rendered before
+the first row of each non-empty group; empty groups produce no header.
+The group transitions are detected in `ui::sessions_table` by calling
+`app::event_rank` — the single source of truth shared with the sort,
+so display order and header placement can't drift. To change the
+grouping, update `event_rank` in `agent-switcher/src/app.rs` and the
+matching label/color pair in `ui::section_header_label_color`; the
+variant order on `Event` itself is not load-bearing.
 
 Hook → event mapping for Claude Code (kept in
 `build_claude_code_settings`):
@@ -117,9 +141,13 @@ prompt, `tool_execution_start` uses a `formatToolActivity` analogue of
 (bash/read/edit/write/grep/find/ls), and `agent_end` walks
 `event.messages` for the assistant's last `type: "text"` content.
 opencode does not yet emit `working` or `idle`; its hook semantics are
-unchanged. New event values should be added to the match in
-`needs_attention` and to the switcher's `match e.event.as_str()` block
-in `agent-switcher/src/ui.rs`.
+unchanged. To promote a new event from `Unknown` to a first-class
+variant: add it to `Event` in `state.rs` (plus the `From<&str>` /
+`From<String>` / `as_str` branches), update `Event::needs_attention` if
+it should be hidden from the tmux indicator, add a rank in
+`agent-switcher/src/app::event_rank`, and add a UI arm in
+`agent-switcher/src/ui.rs`'s `match &e.event` block (the exhaustiveness
+check on `Event` will surface every spot that needs touching).
 
 ## Dev / installed binary divergence
 
