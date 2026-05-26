@@ -96,10 +96,10 @@ fn activate(app: &App) {
     let Some((_, entry)) = app.selected_entry() else {
         return;
     };
-    if entry.tmux_pane.is_empty() {
+    let Some(pane) = entry.tmux_pane.as_deref() else {
         return;
-    }
+    };
     let _ = Command::new("tmux")
-        .args(["switch-client", "-t", &entry.tmux_pane])
+        .args(["switch-client", "-t", pane])
         .status();
 }

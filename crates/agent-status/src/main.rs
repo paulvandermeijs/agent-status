@@ -107,7 +107,10 @@ fn run_set(store: &StateStore, agent_name: AgentName, event: &str) -> io::Result
                 .map(|p| p.to_string_lossy().into_owned())
         })
         .unwrap_or_default();
-    let pane = std::env::var("TMUX_PANE").unwrap_or_default();
+    let pane = std::env::var("TMUX_PANE")
+        .ok()
+        .filter(|s| !s.is_empty());
+    let tmux_session = pane.as_deref().and_then(query_tmux_session);
     let ts = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_secs());
@@ -118,14 +121,32 @@ fn run_set(store: &StateStore, agent_name: AgentName, event: &str) -> io::Result
         agent.name(),
         event,
         &cwd,
-        &pane,
+        pane.as_deref(),
         ts,
         message.as_deref(),
         Some(pid),
+        tmux_session.as_deref(),
     );
     store.write(&session_id, &entry)?;
     refresh_tmux();
     Ok(())
+}
+
+/// Look up the tmux session name (`#S`) that owns `pane`. Returns `None` when
+/// tmux isn't on `$PATH`, the command exits non-zero, or stdout is empty/blank —
+/// every failure mode collapses to "no tmux session captured" so the caller
+/// just stores `None`.
+fn query_tmux_session(pane: &str) -> Option<String> {
+    let output = std::process::Command::new("tmux")
+        .args(["display-message", "-t", pane, "-p", "#S"])
+        .stderr(std::process::Stdio::null())
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let name = String::from_utf8(output.stdout).ok()?.trim().to_string();
+    (!name.is_empty()).then_some(name)
 }
 
 fn run_clear(store: &StateStore, agent_name: AgentName) -> io::Result<()> {

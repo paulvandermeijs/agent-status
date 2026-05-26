@@ -56,7 +56,7 @@ fn sessions_table(app: &App) -> Table<'_> {
             Event::Idle => ("·".to_string(), Color::Gray),
             Event::Unknown(s) => (s.chars().next().unwrap_or('?').to_string(), Color::Gray),
         };
-        let session = display_session(sid, &e.project);
+        let session = display_session(sid, e.tmux_session.as_deref().unwrap_or(&e.project));
         let snippet = e.message.as_deref().map(one_line).unwrap_or_default();
         let mut row = Row::new(vec![
             Cell::from(status_text).style(Style::default().fg(status_color)),
@@ -84,7 +84,7 @@ fn sessions_table(app: &App) -> Table<'_> {
 
     let widths = [
         Constraint::Length(2),
-        Constraint::Length(28),
+        Constraint::Length(40),
         Constraint::Length(16),
         Constraint::Min(0),
     ];

@@ -85,6 +85,8 @@ The `agent` field was added in the v0.2.0 refactor. It is non-optional in the cu
 
 The `pid` field was added later still and is also optional in the schema for the same reason — entries written by older binaries simply skip the PID-based auto-prune (`is_pid_alive` is only consulted when `pid` is `Some`).
 
+`tmux_pane` and `tmux_session` are both `Option<String>` and use a custom `empty_string_as_none` deserializer that collapses `""` to `None`. The bash precursor always emitted `tmux_pane: ""` outside tmux; the deserializer normalizes that so callers handle a single shape. On serialize, `None` for either tmux field is omitted via `skip_serializing_if`. This is a small wire divergence from the bash precursor (which always emitted `tmux_pane`), motivated by adding `tmux_session` alongside it and anticipating future non-tmux session sources. `tmux_session` is preferred over `project` as the human-facing handle in the switcher because it carries the full multi-worktree context (e.g. `<repo>-<worktree>` instead of just `<worktree>`).
+
 The `event` field is the `state::Event` enum: `Notify`, `Done`, `Working`,
 `Idle`, plus `Unknown(String)` for forward compat. On the wire it
 serializes as a plain lowercase string (`"notify"`, `"done"`, …) via a

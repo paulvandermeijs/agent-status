@@ -51,7 +51,7 @@ pub fn format_list(entries: &[(String, AttentionEntry)]) -> String {
 
         out.push_str(sid);
         out.push('\t');
-        out.push_str(&e.tmux_pane);
+        out.push_str(e.tmux_pane.as_deref().unwrap_or(""));
         out.push('\t');
         out.push_str(display.trim_end());
         out.push('\n');
@@ -87,10 +87,11 @@ mod tests {
             project: project.into(),
             cwd: format!("/x/{project}"),
             event: Event::from(event),
-            tmux_pane: pane.into(),
+            tmux_pane: Some(pane.into()),
             ts: 1,
             message: None,
             pid: None,
+            tmux_session: None,
         }
     }
 

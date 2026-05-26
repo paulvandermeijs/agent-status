@@ -98,26 +98,26 @@ impl<'de> Deserialize<'de> for Event {
 /// One entry stored per active agent session that is waiting on user attention.
 ///
 /// Serialized as compact JSON to one file per session (keyed by `session_id`) under
-/// `${XDG_RUNTIME_DIR:-/tmp}/agent-status/`. The field shape is wire-compatible with
-/// the bash version of this tool.
+/// `${XDG_RUNTIME_DIR:-/tmp}/agent-status/`. The bash precursor's five original
+/// field *names* (`project`, `cwd`, `event`, `tmux_pane`, `ts`) are preserved so
+/// readers expecting that vocabulary still find what they need. `tmux_pane` is
+/// now an `Option<String>` rather than the bash version's required string with
+/// an `""` sentinel: empty strings deserialize to `None`, and `None` is omitted
+/// when serializing. The struct has grown additional optional fields over time
+/// (`message`, `pid`, `tmux_session`); each carries `#[serde(default)]` so
+/// older state files lacking the field still load.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct AttentionEntry {
     /// Stable identifier of the agent that wrote this entry (e.g. `"claude-code"`).
     pub agent: String,
+    /// Unix timestamp (seconds) when the entry was written.
+    pub ts: u64,
+    /// Hook event the producing agent reported.
+    pub event: Event,
     /// Basename of the project directory (typically the cwd's last component).
     pub project: String,
     /// Absolute path of the project directory at the time the hook fired.
     pub cwd: String,
-    /// Hook event the producing agent reported.
-    pub event: Event,
-    /// Tmux pane id (such as `%17`), or empty if the hook fired outside tmux.
-    pub tmux_pane: String,
-    /// Unix timestamp (seconds) when the entry was written.
-    pub ts: u64,
-    /// Optional last-message text from the agent (e.g. Claude Code Notification's `message`
-    /// field). Absent in the JSON when `None`; absent on entries written by older binaries.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub message: Option<String>,
     /// PID of the agent process at the time the hook fired (typically `getppid()`
     /// from inside the hook script — the claude/opencode/pi binary). Used to clean
     /// up state files whose owning process has exited without firing its
@@ -125,6 +125,33 @@ pub struct AttentionEntry {
     /// without a pid are never auto-pruned.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pid: Option<u32>,
+    /// Name of the tmux session the hook fired from (the `#S` of the owning
+    /// pane), or `None` when the hook fired outside tmux or the lookup failed.
+    /// Preferred over `project` as the human-facing handle in the switcher
+    /// because it carries the full multi-worktree context. `#[serde(default)]`
+    /// lets entries written by older binaries (which lack this field)
+    /// deserialize as `None`.
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub tmux_session: Option<String>,
+    /// Tmux pane id (such as `%17`), or `None` if the hook fired outside tmux.
+    /// `#[serde(default)]` lets entries written by older binaries (which
+    /// always emitted the field, possibly as `""`) still deserialize. The
+    /// `empty_string_as_none` deserializer normalizes the bash precursor's
+    /// `""` sentinel to `None` so callers only need to check one shape.
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub tmux_pane: Option<String>,
+    /// Optional last-message text from the agent (e.g. Claude Code Notification's `message`
+    /// field). Absent in the JSON when `None`; absent on entries written by older binaries.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
 }
 
 /// Reads, writes and lists [`AttentionEntry`] files under a single state directory.
@@ -287,6 +314,18 @@ fn validate_session_id(session_id: &str) -> io::Result<()> {
     Ok(())
 }
 
+/// Map both an absent JSON field and an empty string to `None`. Lets old state
+/// files (which always emitted `tmux_pane: ""` outside tmux) deserialize into
+/// the modern `Option<String>` shape without callers having to double-check
+/// `is_empty()`.
+fn empty_string_as_none<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let opt = Option::<String>::deserialize(deserializer)?;
+    Ok(opt.filter(|s| !s.is_empty()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -299,10 +338,11 @@ mod tests {
             project: "claude-status".into(),
             cwd: "/Users/x/work/claude-status".into(),
             event: Event::Notify,
-            tmux_pane: "%42".into(),
+            tmux_pane: Some("%42".into()),
             ts: 1_700_000_000,
             message: None,
             pid: None,
+            tmux_session: None,
         };
         let json = serde_json::to_string(&entry).unwrap();
         let parsed: AttentionEntry = serde_json::from_str(&json).unwrap();
@@ -353,10 +393,11 @@ mod tests {
             project: "p".into(),
             cwd: "/c".into(),
             event: Event::Done,
-            tmux_pane: "%1".into(),
+            tmux_pane: Some("%1".into()),
             ts: 1,
             message: None,
             pid: None,
+            tmux_session: None,
         };
         let v: serde_json::Value = serde_json::to_value(&entry).unwrap();
         // Original fields from the bash precursor — must not be renamed/removed.
@@ -375,10 +416,11 @@ mod tests {
             project: project.into(),
             cwd: format!("/x/{project}"),
             event: Event::Notify,
-            tmux_pane: "%1".into(),
+            tmux_pane: Some("%1".into()),
             ts: 1,
             message: None,
             pid: None,
+            tmux_session: None,
         }
     }
 
@@ -454,10 +496,11 @@ mod tests {
             project: "p".into(),
             cwd: "/c".into(),
             event: Event::Notify,
-            tmux_pane: "%1".into(),
+            tmux_pane: Some("%1".into()),
             ts: 1,
             message: Some("Permission required".into()),
             pid: None,
+            tmux_session: None,
         };
         let json = serde_json::to_string(&entry).unwrap();
         assert!(json.contains(r#""message":"Permission required""#));
@@ -472,10 +515,11 @@ mod tests {
             project: "p".into(),
             cwd: "/c".into(),
             event: Event::Done,
-            tmux_pane: "%1".into(),
+            tmux_pane: Some("%1".into()),
             ts: 1,
             message: None,
             pid: None,
+            tmux_session: None,
         };
         let json = serde_json::to_string(&entry).unwrap();
         assert!(!json.contains("message"), "got: {json}");
@@ -488,10 +532,11 @@ mod tests {
             project: "p".into(),
             cwd: "/c".into(),
             event: Event::Notify,
-            tmux_pane: "%1".into(),
+            tmux_pane: Some("%1".into()),
             ts: 1,
             message: None,
             pid: Some(42_000),
+            tmux_session: None,
         };
         let json = serde_json::to_string(&entry).unwrap();
         assert!(json.contains(r#""pid":42000"#));
@@ -506,10 +551,11 @@ mod tests {
             project: "p".into(),
             cwd: "/c".into(),
             event: Event::Done,
-            tmux_pane: "%1".into(),
+            tmux_pane: Some("%1".into()),
             ts: 1,
             message: None,
             pid: None,
+            tmux_session: None,
         };
         let json = serde_json::to_string(&entry).unwrap();
         assert!(!json.contains("pid"), "got: {json}");
@@ -529,6 +575,84 @@ mod tests {
         let json = r#"{"agent":"claude-code","project":"p","cwd":"/c","event":"done","tmux_pane":"%1","ts":1}"#;
         let parsed: AttentionEntry = serde_json::from_str(json).unwrap();
         assert!(parsed.message.is_none());
+    }
+
+    #[test]
+    fn entry_tmux_session_field_roundtrips_when_set() {
+        let entry = AttentionEntry {
+            agent: "claude-code".into(),
+            project: "p".into(),
+            cwd: "/c".into(),
+            event: Event::Notify,
+            tmux_pane: Some("%1".into()),
+            ts: 1,
+            message: None,
+            pid: None,
+            tmux_session: Some("outer".into()),
+        };
+        let json = serde_json::to_string(&entry).unwrap();
+        assert!(json.contains(r#""tmux_session":"outer""#));
+        let parsed: AttentionEntry = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.tmux_session.as_deref(), Some("outer"));
+    }
+
+    #[test]
+    fn entry_tmux_session_field_omitted_from_json_when_none() {
+        let entry = AttentionEntry {
+            agent: "claude-code".into(),
+            project: "p".into(),
+            cwd: "/c".into(),
+            event: Event::Done,
+            tmux_pane: Some("%1".into()),
+            ts: 1,
+            message: None,
+            pid: None,
+            tmux_session: None,
+        };
+        let json = serde_json::to_string(&entry).unwrap();
+        assert!(!json.contains("tmux_session"), "got: {json}");
+    }
+
+    #[test]
+    fn entry_deserializes_when_tmux_session_field_absent() {
+        // Older binaries don't emit this field; default must yield None.
+        let json = r#"{"agent":"claude-code","project":"p","cwd":"/c","event":"done","tmux_pane":"%1","ts":1}"#;
+        let parsed: AttentionEntry = serde_json::from_str(json).unwrap();
+        assert!(parsed.tmux_session.is_none());
+    }
+
+    #[test]
+    fn entry_normalizes_empty_tmux_pane_string_to_none() {
+        // The bash precursor emitted `tmux_pane: ""` outside tmux. The
+        // empty-string deserializer collapses that to None so callers only
+        // need to handle one shape.
+        let json = r#"{"agent":"claude-code","project":"p","cwd":"/c","event":"done","tmux_pane":"","ts":1}"#;
+        let parsed: AttentionEntry = serde_json::from_str(json).unwrap();
+        assert!(parsed.tmux_pane.is_none());
+    }
+
+    #[test]
+    fn entry_normalizes_empty_tmux_session_string_to_none() {
+        let json = r#"{"agent":"claude-code","project":"p","cwd":"/c","event":"done","tmux_pane":"%1","tmux_session":"","ts":1}"#;
+        let parsed: AttentionEntry = serde_json::from_str(json).unwrap();
+        assert!(parsed.tmux_session.is_none());
+    }
+
+    #[test]
+    fn entry_tmux_pane_field_omitted_from_json_when_none() {
+        let entry = AttentionEntry {
+            agent: "claude-code".into(),
+            project: "p".into(),
+            cwd: "/c".into(),
+            event: Event::Done,
+            tmux_pane: None,
+            ts: 1,
+            message: None,
+            pid: None,
+            tmux_session: None,
+        };
+        let json = serde_json::to_string(&entry).unwrap();
+        assert!(!json.contains("tmux_pane"), "got: {json}");
     }
 
     #[test]

@@ -8,15 +8,19 @@ use std::path::Path;
 /// [`Event::from`]: known names (`notify`/`done`/`working`/`idle`) become named
 /// variants, anything else is preserved as [`Event::Unknown`]. `message` is the
 /// agent's last-response text when the hook payload supplies one; pass `None`
-/// otherwise.
+/// otherwise. `tmux_pane` and `tmux_session` carry the enclosing tmux pane id
+/// and session name respectively; pass `None` for either when the hook fires
+/// outside tmux (or capture failed).
+#[allow(clippy::too_many_arguments)]
 pub fn build_entry(
     agent: &str,
     event: &str,
     cwd: &str,
-    tmux_pane: &str,
+    tmux_pane: Option<&str>,
     ts: u64,
     message: Option<&str>,
     pid: Option<u32>,
+    tmux_session: Option<&str>,
 ) -> AttentionEntry {
     let project = Path::new(cwd)
         .file_name()
@@ -26,10 +30,11 @@ pub fn build_entry(
         project,
         cwd: cwd.to_string(),
         event: Event::from(event),
-        tmux_pane: tmux_pane.to_string(),
+        tmux_pane: tmux_pane.map(str::to_string),
         ts,
         message: message.map(str::to_string),
         pid,
+        tmux_session: tmux_session.map(str::to_string),
     }
 }
 
@@ -39,25 +44,25 @@ mod tests {
 
     #[test]
     fn build_entry_uses_basename_of_cwd_as_project() {
-        let e = build_entry("claude-code", "notify", "/Users/me/work/claude-status", "%5", 42, None, None);
+        let e = build_entry("claude-code", "notify", "/Users/me/work/claude-status", Some("%5"), 42, None, None, None);
         assert_eq!(e.agent, "claude-code");
         assert_eq!(e.project, "claude-status");
         assert_eq!(e.cwd, "/Users/me/work/claude-status");
         assert_eq!(e.event, Event::Notify);
-        assert_eq!(e.tmux_pane, "%5");
+        assert_eq!(e.tmux_pane.as_deref(), Some("%5"));
         assert_eq!(e.ts, 42);
         assert!(e.message.is_none());
     }
 
     #[test]
     fn build_entry_parses_unknown_event_into_unknown_variant() {
-        let e = build_entry("claude-code", "future-event", "/x", "", 0, None, None);
+        let e = build_entry("claude-code", "future-event", "/x", None, 0, None, None, None);
         assert_eq!(e.event, Event::Unknown("future-event".to_string()));
     }
 
     #[test]
     fn build_entry_falls_back_to_cwd_when_no_basename() {
-        let e = build_entry("claude-code", "notify", "/", "", 0, None, None);
+        let e = build_entry("claude-code", "notify", "/", None, 0, None, None, None);
         assert_eq!(e.project, "/");
         assert_eq!(e.agent, "claude-code");
     }
@@ -68,9 +73,10 @@ mod tests {
             "claude-code",
             "notify",
             "/Users/me/work/app",
-            "%5",
+            Some("%5"),
             42,
             Some("Permission required"),
+            None,
             None,
         );
         assert_eq!(e.message.as_deref(), Some("Permission required"));
@@ -78,22 +84,43 @@ mod tests {
 
     #[test]
     fn build_entry_leaves_message_none_when_none() {
-        let e = build_entry("claude-code", "done", "/x/p", "%1", 1, None, None);
+        let e = build_entry("claude-code", "done", "/x/p", Some("%1"), 1, None, None, None);
         assert!(e.message.is_none());
     }
 
     #[test]
     fn build_entry_stores_pid_when_some() {
         let e = build_entry(
-            "claude-code", "notify", "/Users/me/work/app", "%5", 42,
-            Some("Permission required"), Some(12345),
+            "claude-code", "notify", "/Users/me/work/app", Some("%5"), 42,
+            Some("Permission required"), Some(12345), None,
         );
         assert_eq!(e.pid, Some(12345));
     }
 
     #[test]
     fn build_entry_leaves_pid_none_when_none() {
-        let e = build_entry("claude-code", "done", "/x/p", "%1", 1, None, None);
+        let e = build_entry("claude-code", "done", "/x/p", Some("%1"), 1, None, None, None);
         assert!(e.pid.is_none());
+    }
+
+    #[test]
+    fn build_entry_stores_tmux_session_when_some() {
+        let e = build_entry(
+            "claude-code", "notify", "/x/p", Some("%5"), 42,
+            None, None, Some("main-session"),
+        );
+        assert_eq!(e.tmux_session.as_deref(), Some("main-session"));
+    }
+
+    #[test]
+    fn build_entry_leaves_tmux_session_none_when_none() {
+        let e = build_entry("claude-code", "done", "/x/p", Some("%1"), 1, None, None, None);
+        assert!(e.tmux_session.is_none());
+    }
+
+    #[test]
+    fn build_entry_leaves_tmux_pane_none_when_none() {
+        let e = build_entry("claude-code", "done", "/x/p", None, 1, None, None, None);
+        assert!(e.tmux_pane.is_none());
     }
 }

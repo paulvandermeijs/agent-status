@@ -179,10 +179,11 @@ mod tests {
             project: project.into(),
             cwd: format!("/x/{project}"),
             event: agent_status::Event::from(event),
-            tmux_pane: "%1".into(),
+            tmux_pane: Some("%1".into()),
             ts: 1,
             message: None,
             pid: None,
+            tmux_session: None,
         }
     }
 

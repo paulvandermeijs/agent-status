@@ -30,10 +30,11 @@ mod tests {
             project: project.into(),
             cwd: format!("/x/{project}"),
             event: Event::from(event),
-            tmux_pane: pane.into(),
+            tmux_pane: Some(pane.into()),
             ts: 1,
             message: None,
             pid: None,
+            tmux_session: None,
         }
     }
 
